@@ -7,11 +7,14 @@ import (
 	types2 "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kaytu-io/pennywise/cmd/flags"
+	"github.com/kaytu-io/pennywise/cmd/optimize/view"
 	"github.com/kaytu-io/pennywise/pkg/api/wastage"
 	"github.com/kaytu-io/pennywise/pkg/server"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
+	"sync"
 	"time"
 )
 
@@ -21,7 +24,6 @@ var ec2InstanceCommand = &cobra.Command{
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profile := flags.ReadStringFlag(cmd, "profile")
-
 		config, err := server.GetConfig()
 		if err != nil {
 			return err
@@ -40,32 +42,71 @@ var ec2InstanceCommand = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		m := view.NewEC2InstanceList()
+		wg := sync.WaitGroup{}
+		wg.Add(len(regions.Regions))
+
 		for _, region := range regions.Regions {
-			cfg.Region = *region.RegionName
-			client := ec2.NewFromConfig(cfg)
-			paginator := ec2.NewDescribeInstancesPaginator(client, &ec2.DescribeInstancesInput{})
+			localCfg := cfg
+			localCfg.Region = *region.RegionName
 
-			for paginator.HasMorePages() {
-				page, err := paginator.NextPage(ctx)
-				if err != nil {
-					panic(err)
-				}
+			go func() {
+				client := ec2.NewFromConfig(localCfg)
+				paginator := ec2.NewDescribeInstancesPaginator(client, &ec2.DescribeInstancesInput{})
+				for paginator.HasMorePages() {
+					page, err := paginator.NextPage(ctx)
+					if err != nil {
+						panic(err)
+					}
 
-				for _, r := range page.Reservations {
-					for _, v := range r.Instances {
-						req, err := getEc2InstanceRequestData(ctx, cfg, v, *region.RegionName)
-						if err != nil {
-							return err
+					for _, r := range page.Reservations {
+						for _, v := range r.Instances {
+							if v.State.Name != types.InstanceStateNameRunning {
+								continue
+							}
+
+							m.SendItem(view.Item{
+								Instance: v,
+								Region:   localCfg.Region,
+							})
 						}
-						res, err := wastage.Ec2InstanceWastageRequest(*req, config.AccessToken)
-						if err != nil {
-							return err
-						}
-						fmt.Println("Instance:", *v.InstanceId)
-						fmt.Println(*res)
 					}
 				}
+				wg.Done()
+			}()
+		}
+
+		go func() {
+			wg.Wait()
+			m.Finished()
+		}()
+
+		p := tea.NewProgram(m)
+		if _, err := p.Run(); err != nil {
+			return err
+		}
+
+		if selectedItem := m.SelectedItem(); selectedItem != nil {
+			fmt.Println()
+			fmt.Println("Getting possible optimizations for:", *selectedItem.Instance.InstanceId)
+			cfg.Region = selectedItem.Region
+			req, err := getEc2InstanceRequestData(ctx, cfg, selectedItem.Instance, selectedItem.Region)
+			if err != nil {
+				return err
 			}
+			res, err := wastage.Ec2InstanceWastageRequest(*req, config.AccessToken)
+			if err != nil {
+				return err
+			}
+			fmt.Println("CurrentCost:", res.CurrentCost)
+			fmt.Println("TotalSavings:", res.TotalSavings)
+			fmt.Println("Recommendations:")
+			fmt.Println("----------------------------------------------------------------------------")
+			for _, recom := range res.Recommendations {
+				fmt.Printf("%s; Total saving: %v\n", recom.Description, recom.Saving)
+			}
+			fmt.Println("----------------------------------------------------------------------------")
 		}
 
 		return nil
