@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"strings"
 	"time"
 )
@@ -32,7 +31,7 @@ func NewEC2InstanceList() *EC2InstanceList {
 }
 
 func (m *EC2InstanceList) Init() tea.Cmd {
-	return tickCmd()
+	return tickCmdWithDuration(time.Millisecond * 50)
 }
 
 func (m *EC2InstanceList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -64,44 +63,55 @@ func (m *EC2InstanceList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "enter", " ":
-			m.selected = m.cursor
-			return m, tea.Quit
+			if len(m.items) > 0 {
+				m.selected = m.cursor
+				return m, tea.Quit
+			}
 		}
 	}
-	return m, tickCmd()
+	return m, tickCmdWithDuration(time.Millisecond * 50)
 }
 
 func (m *EC2InstanceList) View() string {
-	var b strings.Builder
 	if m.selected != -1 {
 		return ""
 	}
 
+	var b strings.Builder
+	pad := strings.Repeat(" ", padding)
+	b.WriteString("\n")
 	if m.loading {
-		b.WriteString("Loading all EC2 Instances ")
-		for i := int64(0); i < 5; i++ {
-			selected := time.Now().Unix() % 5
-			if i == selected {
-				b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "235", Dark: "252"}).Render("•"))
-			} else {
-				b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "250", Dark: "238"}).Render("•"))
-			}
+		loadingStr := ""
+		switch (time.Now().UnixMilli() / 100) % 3 {
+		case 0:
+			loadingStr = "-"
+		case 1:
+			loadingStr = "\\"
+		case 2:
+			loadingStr = "/"
 		}
-		b.WriteString("\n\n")
+		b.WriteString(fmt.Sprintf(pad+loadingStr+" Found %d EC2 Instances.\n\n", len(m.items)))
 	} else {
-		b.WriteString("Finished loading all EC2 Instances.\n\n")
+		b.WriteString(pad + "Finished loading all EC2 Instances.\n\n")
 	}
-	b.WriteString("Which EC2 Instance you want to optimize?\n\n")
 
-	for i, choice := range m.items {
-		cursor := " "
-		if m.cursor == i {
-			cursor = ">"
+	if len(m.items) > 0 {
+		b.WriteString(pad + "Which EC2 Instance you want to optimize?\n\n")
+
+		for i, choice := range m.items {
+			cursor := " "
+			if m.cursor == i {
+				cursor = ">"
+			}
+			text := fmt.Sprintf("%s%s %s - %s - %s - %s", pad, cursor, *choice.Instance.InstanceId, choice.Instance.InstanceType, *choice.Instance.PlatformDetails, choice.Region)
+			if m.cursor == i {
+				text = selectedStyle(text)
+			}
+			text += "\n"
+			b.WriteString(text)
 		}
-		name := *choice.Instance.InstanceId
-		b.WriteString(fmt.Sprintf("%s %s - %s - %s - %s\n", cursor, name, choice.Instance.InstanceType, *choice.Instance.PlatformDetails, choice.Region))
 	}
-	b.WriteString("\nPress q to quit.\n")
+	b.WriteString("\n" + pad + "Press q to quit.\n")
 	return b.String()
 }
 
