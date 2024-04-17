@@ -73,6 +73,9 @@ func (m *EC2InstanceList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *EC2InstanceList) View() string {
 	var b strings.Builder
+	if m.selected != -1 {
+		return ""
+	}
 
 	if m.loading {
 		b.WriteString("Loading all EC2 Instances ")
@@ -96,9 +99,6 @@ func (m *EC2InstanceList) View() string {
 			cursor = ">"
 		}
 		name := *choice.Instance.InstanceId
-		if choice.Instance.KeyName != nil {
-			name = *choice.Instance.KeyName
-		}
 		b.WriteString(fmt.Sprintf("%s %s - %s - %s - %s\n", cursor, name, choice.Instance.InstanceType, *choice.Instance.PlatformDetails, choice.Region))
 	}
 	b.WriteString("\nPress q to quit.\n")

@@ -88,17 +88,36 @@ var ec2InstanceCommand = &cobra.Command{
 		}
 
 		if selectedItem := m.SelectedItem(); selectedItem != nil {
-			fmt.Println()
-			fmt.Println("Getting possible optimizations for:", *selectedItem.Instance.InstanceId)
 			cfg.Region = selectedItem.Region
-			req, err := getEc2InstanceRequestData(ctx, cfg, selectedItem.Instance, selectedItem.Region)
-			if err != nil {
+
+			m := view.NewProgressBar(
+				fmt.Sprintf("Getting possible optimizations for: %s", *selectedItem.Instance.InstanceId))
+
+			var goErr error
+			var res *wastage.EC2InstanceWastageResponse
+			go func() {
+				m.UpdateProgressBar(0.10)
+				defer m.UpdateProgressBar(1)
+
+				req, err := getEc2InstanceRequestData(ctx, cfg, selectedItem.Instance, selectedItem.Region)
+				if err != nil {
+					goErr = err
+					return
+				}
+				m.UpdateProgressBar(0.50)
+				res, goErr = wastage.Ec2InstanceWastageRequest(*req, config.AccessToken)
+			}()
+
+			p := tea.NewProgram(m)
+			if _, err := p.Run(); err != nil {
 				return err
 			}
-			res, err := wastage.Ec2InstanceWastageRequest(*req, config.AccessToken)
-			if err != nil {
-				return err
+
+			if goErr != nil {
+				return goErr
 			}
+
+			fmt.Println("InstanceID:", *selectedItem.Instance.InstanceId)
 			fmt.Println("CurrentCost:", res.CurrentCost)
 			fmt.Println("TotalSavings:", res.TotalSavings)
 			fmt.Println("Recommendations:")
