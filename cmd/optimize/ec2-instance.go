@@ -33,6 +33,7 @@ var ec2InstanceCommand = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		cfg.Region = "us-east-2"
 		regionClient := ec2.NewFromConfig(cfg)
 
 		regions, err := regionClient.DescribeRegions(ctx, &ec2.DescribeRegionsInput{AllRegions: aws.Bool(false)})
@@ -72,9 +73,6 @@ var ec2InstanceCommand = &cobra.Command{
 }
 
 func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance types.Instance, region string) (*wastage.EC2InstanceWastageRequest, error) {
-
-	var req wastage.EC2InstanceWastageRequest
-
 	client := ec2.NewFromConfig(cfg)
 
 	var volumes []types.Volume
@@ -98,7 +96,7 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 		Dimensions: []types2.DimensionFilter{
 			{
 				Name:  aws.String("InstanceId"),
-				Value: req.Instance.InstanceId,
+				Value: instance.InstanceId,
 			},
 		},
 	})
@@ -126,7 +124,7 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 				Dimensions: []types2.Dimension{
 					{
 						Name:  aws.String("InstanceId"),
-						Value: req.Instance.InstanceId,
+						Value: instance.InstanceId,
 					},
 				},
 				StartTime:  aws.Time(startTime),
