@@ -33,11 +33,12 @@ type OptimizationItem struct {
 
 	CurrentMemory string
 	TargetMemory  string
+
+	Preferences []preferences2.PreferenceItem
 }
 
 type Ec2InstanceOptimizations struct {
 	itemsChan chan OptimizationItem
-	loading   bool
 
 	table table.Model
 	items []OptimizationItem
@@ -45,10 +46,11 @@ type Ec2InstanceOptimizations struct {
 	detailsPage *Ec2InstanceDetail
 	prefConf    *PreferencesConfiguration
 
-	clearScreen bool
+	clearScreen  bool
+	instanceChan chan OptimizationItem
 }
 
-func NewEC2InstanceOptimizations() *Ec2InstanceOptimizations {
+func NewEC2InstanceOptimizations(instanceChan chan OptimizationItem) *Ec2InstanceOptimizations {
 	columns := []table.Column{
 		{Title: "Instance Id", Width: 23},
 		{Title: "Instance Type", Width: 15},
@@ -77,10 +79,10 @@ func NewEC2InstanceOptimizations() *Ec2InstanceOptimizations {
 	t.SetStyles(s)
 
 	return &Ec2InstanceOptimizations{
-		itemsChan: make(chan OptimizationItem, 1000),
-		loading:   false,
-		table:     t,
-		items:     nil,
+		itemsChan:    make(chan OptimizationItem, 1000),
+		table:        t,
+		items:        nil,
+		instanceChan: instanceChan,
 	}
 }
 
@@ -144,13 +146,26 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q":
 			return m, tea.Quit
-		case "p", "P":
-			m.prefConf = NewPreferencesConfiguration(func(items []preferences2.PreferenceItem) {
-				fmt.Println(items)
-				m.prefConf = nil
-				m.clearScreen = true
-			})
-			initCmd = m.prefConf.Init()
+		case "p":
+			if len(m.table.SelectedRow()) == 0 {
+				break
+			}
+			selectedInstanceID := m.table.SelectedRow()[0]
+			for _, i := range m.items {
+				if selectedInstanceID == *i.Instance.InstanceId {
+					m.prefConf = NewPreferencesConfiguration(i.Preferences, func(items []preferences2.PreferenceItem) {
+						i.Preferences = items
+						i.OptimizationLoading = true
+						m.itemsChan <- i
+						m.prefConf = nil
+						m.clearScreen = true
+						// re-evaluate
+						m.instanceChan <- i
+					})
+					initCmd = m.prefConf.Init()
+					break
+				}
+			}
 		case "enter":
 			if len(m.table.SelectedRow()) == 0 {
 				break
@@ -197,8 +212,4 @@ func (m *Ec2InstanceOptimizations) View() string {
 
 func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {
 	m.itemsChan <- item
-}
-
-func (m *Ec2InstanceOptimizations) Finished() {
-	m.loading = false
 }

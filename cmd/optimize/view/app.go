@@ -8,8 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	tea "github.com/charmbracelet/bubbletea"
+	preferences2 "github.com/kaytu-io/pennywise/cmd/optimize/preferences"
 	"github.com/kaytu-io/pennywise/pkg/api/wastage"
-	awsConfig "github.com/kaytu-io/pennywise/pkg/aws"
 	"github.com/kaytu-io/pennywise/pkg/server"
 	"golang.org/x/net/context"
 	"sync"
@@ -17,21 +17,23 @@ import (
 )
 
 type App struct {
-	Profile   string
-	status    string
-	errorChan chan error
+	status              string
+	errorChan           chan error
+	processInstanceChan chan OptimizationItem
 
 	optimizationsTable *Ec2InstanceOptimizations
 }
 
-func NewApp(profile string) *App {
+func NewApp(cfg aws.Config) *App {
+	pi := make(chan OptimizationItem, 1000)
 	r := &App{
-		Profile:            profile,
-		status:             "",
-		errorChan:          make(chan error, 1000),
-		optimizationsTable: NewEC2InstanceOptimizations(),
+		status:              "",
+		errorChan:           make(chan error, 1000),
+		processInstanceChan: pi,
+		optimizationsTable:  NewEC2InstanceOptimizations(pi),
 	}
-	go r.StartProcess(profile)
+	go r.ProcessAllRegions(cfg)
+	go r.ProcessInstances(cfg)
 	return r
 }
 
@@ -59,7 +61,95 @@ func (m *App) View() string {
 		m.optimizationsTable.View()
 }
 
-func (m *App) StartProcess(profile string) {
+func (m *App) ProcessInstances(awsCfg aws.Config) {
+	config, err := server.GetConfig()
+	if err != nil {
+		m.errorChan <- err
+		return
+	}
+
+	for item := range m.processInstanceChan {
+		awsCfg.Region = item.Region
+		go m.ProcessInstance(config, awsCfg, item.Instance, item.Preferences)
+	}
+}
+
+func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, instance types.Instance, preferences []preferences2.PreferenceItem) {
+	defer func() {
+		if r := recover(); r != nil {
+			m.errorChan <- fmt.Errorf("%v", r)
+		}
+	}()
+
+	req, err := getEc2InstanceRequestData(context.Background(), awsConf, instance, preferences2.Export(preferences))
+	if err != nil {
+		m.errorChan <- err
+		return
+	}
+	res, err := wastage.Ec2InstanceWastageRequest(*req, config.AccessToken)
+	if err != nil {
+		m.errorChan <- err
+		return
+	}
+
+	m.optimizationsTable.SendItem(OptimizationItem{
+		Instance:                  instance,
+		Region:                    awsConf.Region,
+		OptimizationLoading:       false,
+		TargetInstanceType:        res.RightSizing.TargetInstanceType,
+		TotalSaving:               res.RightSizing.Saving,
+		CurrentCost:               res.RightSizing.CurrentCost,
+		TargetCost:                res.RightSizing.TargetCost,
+		AvgCPUUsage:               res.RightSizing.AvgCPUUsage,
+		TargetCores:               res.RightSizing.TargetCores,
+		AvgNetworkBandwidth:       res.RightSizing.AvgNetworkBandwidth,
+		TargetNetworkPerformance:  res.RightSizing.TargetNetworkPerformance,
+		CurrentNetworkPerformance: res.RightSizing.CurrentNetworkPerformance,
+		CurrentMemory:             res.RightSizing.CurrentMemory,
+		TargetMemory:              res.RightSizing.TargetMemory,
+		Preferences:               preferences,
+	})
+}
+
+func (m *App) ProcessRegion(cfg aws.Config) {
+	ctx := context.Background()
+	defer func() {
+		if r := recover(); r != nil {
+			m.errorChan <- fmt.Errorf("%v", r)
+		}
+	}()
+	client := ec2.NewFromConfig(cfg)
+	paginator := ec2.NewDescribeInstancesPaginator(client, &ec2.DescribeInstancesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			m.errorChan <- err
+			return
+		}
+
+		for _, r := range page.Reservations {
+			for _, v := range r.Instances {
+				if v.State.Name != types.InstanceStateNameRunning {
+					continue
+				}
+
+				preferences := preferences2.DefaultPreferences()
+				oi := OptimizationItem{
+					Instance:            v,
+					Region:              cfg.Region,
+					OptimizationLoading: true,
+					TargetInstanceType:  "",
+					TotalSaving:         0,
+					Preferences:         preferences,
+				}
+				m.optimizationsTable.SendItem(oi)
+				m.processInstanceChan <- oi
+			}
+		}
+	}
+}
+
+func (m *App) ProcessAllRegions(cfg aws.Config) {
 	m.status = "Retrieving data from AWS"
 	defer func() {
 		if r := recover(); r != nil {
@@ -78,23 +168,9 @@ func (m *App) StartProcess(profile string) {
 		m.status = "Successfully finished loading all the data"
 	}()
 
-	ctx := context.Background()
-	config, err := server.GetConfig()
-	if err != nil {
-		m.errorChan <- err
-		return
-	}
-
-	m.status = "Authenticating"
-	cfg, err := awsConfig.GetConfig(ctx, "", "", "", "", &profile, nil)
-	if err != nil {
-		m.errorChan <- err
-		return
-	}
-
 	m.status = "Listing all available regions"
 	regionClient := ec2.NewFromConfig(cfg)
-	regions, err := regionClient.DescribeRegions(ctx, &ec2.DescribeRegionsInput{AllRegions: aws.Bool(false)})
+	regions, err := regionClient.DescribeRegions(context.Background(), &ec2.DescribeRegionsInput{AllRegions: aws.Bool(false)})
 	if err != nil {
 		m.errorChan <- err
 		return
@@ -109,106 +185,29 @@ func (m *App) StartProcess(profile string) {
 		localCfg.Region = *region.RegionName
 
 		go func() {
-			wgOptimizations := sync.WaitGroup{}
-			defer func() {
-				if r := recover(); r != nil {
-					m.errorChan <- err
-				}
-
-				wgOptimizations.Wait()
-				wg.Done()
-			}()
-			client := ec2.NewFromConfig(localCfg)
-			paginator := ec2.NewDescribeInstancesPaginator(client, &ec2.DescribeInstancesInput{})
-			for paginator.HasMorePages() {
-				page, err := paginator.NextPage(ctx)
-				if err != nil {
-					m.errorChan <- err
-					return
-				}
-
-				for _, r := range page.Reservations {
-					for _, v := range r.Instances {
-						if v.State.Name != types.InstanceStateNameRunning {
-							continue
-						}
-
-						m.optimizationsTable.SendItem(OptimizationItem{
-							Instance:            v,
-							Region:              localCfg.Region,
-							OptimizationLoading: true,
-							TargetInstanceType:  "",
-							TotalSaving:         0,
-						})
-
-						awsConf := localCfg
-						localInstance := v
-						wgOptimizations.Add(1)
-						go func() {
-							defer func() {
-								if r := recover(); r != nil {
-									m.errorChan <- err
-								}
-								wgOptimizations.Done()
-							}()
-
-							req, err := getEc2InstanceRequestData(context.Background(), awsConf, localInstance)
-							if err != nil {
-								m.errorChan <- err
-								return
-							}
-							res, err := wastage.Ec2InstanceWastageRequest(*req, config.AccessToken)
-							if err != nil {
-								m.errorChan <- err
-								return
-							}
-
-							m.optimizationsTable.SendItem(OptimizationItem{
-								Instance:                  localInstance,
-								Region:                    localCfg.Region,
-								OptimizationLoading:       false,
-								TargetInstanceType:        res.RightSizing.TargetInstanceType,
-								TotalSaving:               res.RightSizing.Saving,
-								CurrentCost:               res.RightSizing.CurrentCost,
-								TargetCost:                res.RightSizing.TargetCost,
-								AvgCPUUsage:               res.RightSizing.AvgCPUUsage,
-								TargetCores:               res.RightSizing.TargetCores,
-								AvgNetworkBandwidth:       res.RightSizing.AvgNetworkBandwidth,
-								TargetNetworkPerformance:  res.RightSizing.TargetNetworkPerformance,
-								CurrentNetworkPerformance: res.RightSizing.CurrentNetworkPerformance,
-								CurrentMemory:             res.RightSizing.CurrentMemory,
-								TargetMemory:              res.RightSizing.TargetMemory,
-							})
-						}()
-					}
-				}
-			}
+			defer wg.Done()
+			m.ProcessRegion(localCfg)
 		}()
 	}
-
 	wg.Wait()
-	m.optimizationsTable.Finished()
 }
 
-func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance types.Instance) (*wastage.EC2InstanceWastageRequest, error) {
+func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance types.Instance, preferences map[string]*string) (*wastage.EC2InstanceWastageRequest, error) {
 	client := ec2.NewFromConfig(cfg)
 
-	var volumes []types.Volume
+	var volumeIds []string
 	for _, bd := range instance.BlockDeviceMappings {
 		if bd.Ebs == nil {
 			continue
 		}
-		res, err := client.DescribeVolumes(ctx, &ec2.DescribeVolumesInput{
-			VolumeIds: []string{*bd.Ebs.VolumeId},
-		})
-		if err != nil {
-			return nil, err
-		}
+		volumeIds = append(volumeIds, *bd.Ebs.VolumeId)
+	}
 
-		if len(res.Volumes) == 0 {
-			return nil, fmt.Errorf("volume not found")
-		}
-		volumes = append(volumes, res.Volumes...)
+	res, err := client.DescribeVolumes(ctx, &ec2.DescribeVolumesInput{
+		VolumeIds: volumeIds,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	cloudwatchClient := cloudwatch.NewFromConfig(cfg)
@@ -264,9 +263,10 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 		}
 	}
 	return &wastage.EC2InstanceWastageRequest{
-		Instance: instance,
-		Metrics:  metrics,
-		Volumes:  volumes,
-		Region:   cfg.Region,
+		Instance:    instance,
+		Volumes:     res.Volumes,
+		Metrics:     metrics,
+		Region:      cfg.Region,
+		Preferences: preferences,
 	}, nil
 }

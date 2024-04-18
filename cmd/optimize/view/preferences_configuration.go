@@ -35,9 +35,8 @@ type PreferencesConfiguration struct {
 	close func([]preferences2.PreferenceItem)
 }
 
-func NewPreferencesConfiguration(close func([]preferences2.PreferenceItem)) *PreferencesConfiguration {
+func NewPreferencesConfiguration(preferences []preferences2.PreferenceItem, close func([]preferences2.PreferenceItem)) *PreferencesConfiguration {
 	var inputs []textinput.Model
-	preferences := preferences2.DefaultPreferences()
 
 	for idx, pref := range preferences {
 		in := textinput.New()
@@ -50,7 +49,10 @@ func NewPreferencesConfiguration(close func([]preferences2.PreferenceItem)) *Pre
 			in.Placeholder = "Pinned to current EC2 Instance"
 			in.Validate = pinnedValidator
 		} else {
-			in.Placeholder = "empty value"
+			in.Placeholder = "Any"
+			if pref.Value != nil {
+				in.SetValue(*pref.Value)
+			}
 		}
 		if pref.IsNumber {
 			in.Validate = numberValidator
@@ -85,7 +87,7 @@ func (m *PreferencesConfiguration) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				in.SetValue("")
 				pref.Value = nil
 			} else {
-				in.Placeholder = "empty value"
+				in.Placeholder = "Any"
 				in.Validate = nil
 				if len(pref.PossibleValues) > 0 {
 					in.SetValue(pref.PossibleValues[0])

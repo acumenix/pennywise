@@ -12,10 +12,11 @@ type AWSCredential struct {
 }
 
 type EC2InstanceWastageRequest struct {
-	Instance types.Instance                `json:"instance"`
-	Volumes  []types.Volume                `json:"volumes"`
-	Metrics  map[string][]types2.Datapoint `json:"metrics"`
-	Region   string                        `json:"region"`
+	Instance    types.Instance                `json:"instance"`
+	Volumes     []types.Volume                `json:"volumes"`
+	Metrics     map[string][]types2.Datapoint `json:"metrics"`
+	Region      string                        `json:"region"`
+	Preferences map[string]*string            `json:"preferences"`
 }
 
 type RightSizingRecommendation struct {
