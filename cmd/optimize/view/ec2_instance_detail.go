@@ -51,12 +51,12 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 			item.Region,
 		},
 		{
-			"Total Cost",
+			"Total Cost (Monthly)",
 			fmt.Sprintf("$%v", item.CurrentCost),
 			fmt.Sprintf("$%v", item.TargetCost),
 		},
 		{
-			"Total Saving",
+			"Total Saving (Monthly)",
 			"$0",
 			fmt.Sprintf("$%v", item.TotalSaving),
 		},
