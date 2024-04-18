@@ -25,6 +25,7 @@ type OptimizationItem struct {
 type Ec2InstanceOptimizations struct {
 	itemsChan chan OptimizationItem
 	loading   bool
+	debugMsg  string
 
 	table        table.Model
 	items        []OptimizationItem
@@ -77,17 +78,17 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for {
 			nothingToAdd := false
 			select {
-			case item := <-m.itemsChan:
+			case newItem := <-m.itemsChan:
 				updated := false
 				for idx, i := range m.items {
-					if *i.Instance.InstanceId == *item.Instance.InstanceId {
-						m.items[idx] = i
+					if *newItem.Instance.InstanceId == *i.Instance.InstanceId {
+						m.items[idx] = newItem
 						updated = true
 						break
 					}
 				}
 				if !updated {
-					m.items = append(m.items, item)
+					m.items = append(m.items, newItem)
 				}
 
 				var rows []table.Row
@@ -141,7 +142,7 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Ec2InstanceOptimizations) View() string {
-	return baseStyle.Render(m.table.View()) + "\n"
+	return m.debugMsg + "\n" + baseStyle.Render(m.table.View()) + "\n"
 }
 
 func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {

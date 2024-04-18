@@ -28,7 +28,7 @@ func NewApp(profile string) *App {
 	r := &App{
 		Profile:            profile,
 		status:             "",
-		errorChan:          make(chan error, 100),
+		errorChan:          make(chan error, 1000),
 		optimizationsTable: NewEC2InstanceOptimizations(),
 	}
 	go r.StartProcess(profile)
@@ -110,6 +110,14 @@ func (m *App) StartProcess(profile string) {
 
 		go func() {
 			wgOptimizations := sync.WaitGroup{}
+			defer func() {
+				if r := recover(); r != nil {
+					m.errorChan <- err
+				}
+
+				wgOptimizations.Wait()
+				wg.Done()
+			}()
 			client := ec2.NewFromConfig(localCfg)
 			paginator := ec2.NewDescribeInstancesPaginator(client, &ec2.DescribeInstancesInput{})
 			for paginator.HasMorePages() {
@@ -137,6 +145,13 @@ func (m *App) StartProcess(profile string) {
 						localInstance := v
 						wgOptimizations.Add(1)
 						go func() {
+							defer func() {
+								if r := recover(); r != nil {
+									m.errorChan <- err
+								}
+								wgOptimizations.Done()
+							}()
+
 							req, err := getEc2InstanceRequestData(context.Background(), awsConf, localInstance)
 							if err != nil {
 								m.errorChan <- err
@@ -155,13 +170,10 @@ func (m *App) StartProcess(profile string) {
 								TargetInstanceType:  res.RightSizing.TargetInstanceType,
 								TotalSaving:         res.RightSizing.Saving,
 							})
-							wgOptimizations.Done()
 						}()
 					}
 				}
 			}
-			wgOptimizations.Wait()
-			wg.Done()
 		}()
 	}
 
