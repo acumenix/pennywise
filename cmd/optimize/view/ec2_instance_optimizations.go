@@ -20,25 +20,38 @@ type OptimizationItem struct {
 	OptimizationLoading bool
 	TargetInstanceType  string
 	TotalSaving         float64
+	CurrentCost         float64
+	TargetCost          float64
+
+	AvgCPUUsage string
+	TargetCores string
+
+	AvgNetworkBandwidth       string
+	TargetNetworkPerformance  string
+	CurrentNetworkPerformance string
+
+	CurrentMemory string
+	TargetMemory  string
 }
 
 type Ec2InstanceOptimizations struct {
 	itemsChan chan OptimizationItem
 	loading   bool
 
-	table        table.Model
-	items        []OptimizationItem
-	selectedItem *OptimizationItem
+	table table.Model
+	items []OptimizationItem
+
+	detailsPage *Ec2InstanceDetail
 }
 
 func NewEC2InstanceOptimizations() *Ec2InstanceOptimizations {
 	columns := []table.Column{
-		{Title: "InstanceId", Width: 30},
-		{Title: "InstanceType", Width: 20},
-		{Title: "Region", Width: 10},
-		{Title: "PlatformDetails", Width: 15},
-		{Title: "TargetInstanceType", Width: 20},
-		{Title: "TotalSaving", Width: 15},
+		{Title: "Instance Id", Width: 23},
+		{Title: "Instance Type", Width: 15},
+		{Title: "Region", Width: 15},
+		{Title: "Platform", Width: 15},
+		{Title: "Optimized Instance Type", Width: 25},
+		{Title: "Total Saving (Monthly)", Width: 25},
 	}
 
 	t := table.New(
@@ -60,18 +73,23 @@ func NewEC2InstanceOptimizations() *Ec2InstanceOptimizations {
 	t.SetStyles(s)
 
 	return &Ec2InstanceOptimizations{
-		itemsChan:    make(chan OptimizationItem, 1000),
-		loading:      false,
-		table:        t,
-		items:        nil,
-		selectedItem: nil,
+		itemsChan:   make(chan OptimizationItem, 1000),
+		loading:     false,
+		table:       t,
+		items:       nil,
+		detailsPage: nil,
 	}
 }
 
 func (m *Ec2InstanceOptimizations) Init() tea.Cmd { return tickCmdWithDuration(time.Millisecond * 50) }
 
 func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	if m.detailsPage != nil {
+		_, cmd := m.detailsPage.Update(msg)
+		return m, cmd
+	}
+
+	var cmd, initCmd tea.Cmd
 	switch msg := msg.(type) {
 	case tickMsg:
 		for {
@@ -118,10 +136,8 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
-			if m.table.Focused() {
-				m.table.Blur()
-			} else {
-				m.table.Focus()
+			if m.detailsPage != nil {
+				m.detailsPage = nil
 			}
 		case "enter":
 			if len(m.table.SelectedRow()) == 0 {
@@ -131,17 +147,33 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			selectedInstanceID := m.table.SelectedRow()[0]
 			for _, i := range m.items {
 				if selectedInstanceID == *i.Instance.InstanceId {
-					m.selectedItem = &i
+					m.detailsPage = NewEc2InstanceDetail(i, func() {
+						m.detailsPage = nil
+					})
+					initCmd = m.detailsPage.Init()
 				}
 			}
 		}
 	}
+
 	m.table, cmd = m.table.Update(msg)
-	return m, tea.Batch(cmd, tickCmdWithDuration(time.Millisecond*50))
+	cmd = tea.Batch(cmd, tickCmdWithDuration(time.Millisecond*50))
+	if initCmd != nil {
+		cmd = tea.Batch(cmd, initCmd)
+	}
+	return m, cmd
 }
 
 func (m *Ec2InstanceOptimizations) View() string {
-	return baseStyle.Render(m.table.View()) + "\n"
+	if m.detailsPage != nil {
+		return m.detailsPage.View()
+	}
+	return baseStyle.Render(m.table.View()) + "\n\n" +
+		"  ↑/↓: move\n" +
+		"  enter: see details\n" +
+		"  p: change preferences for one item\n" +
+		"  P: change preferences for all items\n" +
+		"  q/ctrl+c: exit\n\n"
 }
 
 func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {

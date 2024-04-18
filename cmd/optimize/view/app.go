@@ -38,7 +38,7 @@ func NewApp(profile string) *App {
 func (m *App) Init() tea.Cmd {
 	optTableCmd := m.optimizationsTable.Init()
 
-	return tea.Batch(optTableCmd)
+	return tea.Batch(optTableCmd, tea.EnterAltScreen)
 }
 
 func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -55,7 +55,7 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *App) View() string {
-	return "\n  Status: " + m.status + "\n\n" +
+	return "\n  Status: " + m.status + "..." + "\n\n" +
 		m.optimizationsTable.View()
 }
 
@@ -164,11 +164,20 @@ func (m *App) StartProcess(profile string) {
 							}
 
 							m.optimizationsTable.SendItem(OptimizationItem{
-								Instance:            localInstance,
-								Region:              localCfg.Region,
-								OptimizationLoading: false,
-								TargetInstanceType:  res.RightSizing.TargetInstanceType,
-								TotalSaving:         res.RightSizing.Saving,
+								Instance:                  localInstance,
+								Region:                    localCfg.Region,
+								OptimizationLoading:       false,
+								TargetInstanceType:        res.RightSizing.TargetInstanceType,
+								TotalSaving:               res.RightSizing.Saving,
+								CurrentCost:               res.RightSizing.CurrentCost,
+								TargetCost:                res.RightSizing.TargetCost,
+								AvgCPUUsage:               res.RightSizing.AvgCPUUsage,
+								TargetCores:               res.RightSizing.TargetCores,
+								AvgNetworkBandwidth:       res.RightSizing.AvgNetworkBandwidth,
+								TargetNetworkPerformance:  res.RightSizing.TargetNetworkPerformance,
+								CurrentNetworkPerformance: res.RightSizing.CurrentNetworkPerformance,
+								CurrentMemory:             res.RightSizing.CurrentMemory,
+								TargetMemory:              res.RightSizing.TargetMemory,
 							})
 						}()
 					}
