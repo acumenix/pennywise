@@ -12,16 +12,22 @@ import (
 	"github.com/kaytu-io/pennywise/pkg/api/wastage"
 	"github.com/kaytu-io/pennywise/pkg/server"
 	"golang.org/x/net/context"
+	"strings"
 	"sync"
 	"time"
 )
 
 type App struct {
 	status              string
+	statusErr           string
 	errorChan           chan error
+	statusChan          chan string
 	processInstanceChan chan OptimizationItem
 
 	optimizationsTable *Ec2InstanceOptimizations
+
+	counter      int64
+	counterMutex sync.RWMutex
 }
 
 func NewApp(cfg aws.Config) *App {
@@ -29,9 +35,11 @@ func NewApp(cfg aws.Config) *App {
 	r := &App{
 		status:              "",
 		errorChan:           make(chan error, 1000),
+		statusChan:          make(chan string, 1000),
 		processInstanceChan: pi,
 		optimizationsTable:  NewEC2InstanceOptimizations(pi),
 	}
+	go r.UpdateStatus()
 	go r.ProcessAllRegions(cfg)
 	go r.ProcessInstances(cfg)
 	return r
@@ -57,8 +65,25 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *App) View() string {
-	return "\n  Status: " + m.status + "..." + "\n\n" +
-		m.optimizationsTable.View()
+	sb := strings.Builder{}
+	sb.WriteString(m.optimizationsTable.View())
+	sb.WriteString("\n  status: " + m.status + "\n")
+	if len(m.statusErr) > 0 {
+		sb.WriteString("  error: " + m.statusErr + "\n")
+	}
+	sb.WriteString("\n\n")
+	return sb.String()
+}
+
+func (m *App) UpdateStatus() {
+	for {
+		select {
+		case err := <-m.errorChan:
+			m.statusErr = fmt.Sprintf("Failed due to %v", err)
+		case newStatus := <-m.statusChan:
+			m.status = newStatus
+		}
+	}
 }
 
 func (m *App) ProcessInstances(awsCfg aws.Config) {
@@ -70,18 +95,31 @@ func (m *App) ProcessInstances(awsCfg aws.Config) {
 
 	for item := range m.processInstanceChan {
 		awsCfg.Region = item.Region
-		go m.ProcessInstance(config, awsCfg, item.Instance, item.Preferences)
+		localItem := item
+		m.counterMutex.Lock()
+		m.counter++
+		localCounter := m.counter
+		m.counterMutex.Unlock()
+		m.statusChan <- fmt.Sprintf("calculating possible optimizations for %d instances.", localCounter)
+
+		go func() {
+			m.ProcessInstance(config, awsCfg, localItem)
+			m.counterMutex.Lock()
+			defer m.counterMutex.Unlock()
+			m.counter--
+			m.statusChan <- fmt.Sprintf("calculating possible optimizations for %d instances.", m.counter)
+		}()
 	}
 }
 
-func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, instance types.Instance, preferences []preferences2.PreferenceItem) {
+func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, item OptimizationItem) {
 	defer func() {
 		if r := recover(); r != nil {
 			m.errorChan <- fmt.Errorf("%v", r)
 		}
 	}()
 
-	req, err := getEc2InstanceRequestData(context.Background(), awsConf, instance, preferences2.Export(preferences))
+	req, err := getEc2InstanceRequestData(context.Background(), awsConf, item.Instance, preferences2.Export(item.Preferences))
 	if err != nil {
 		m.errorChan <- err
 		return
@@ -91,9 +129,14 @@ func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, instanc
 		m.errorChan <- err
 		return
 	}
+	if res.RightSizing == nil {
+		item.OptimizationLoading = false
+		m.optimizationsTable.SendItem(item)
+		return
+	}
 
 	m.optimizationsTable.SendItem(OptimizationItem{
-		Instance:                  instance,
+		Instance:                  item.Instance,
 		Region:                    awsConf.Region,
 		OptimizationLoading:       false,
 		TargetInstanceType:        res.RightSizing.TargetInstanceType,
@@ -107,7 +150,7 @@ func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, instanc
 		CurrentNetworkPerformance: res.RightSizing.CurrentNetworkPerformance,
 		CurrentMemory:             res.RightSizing.CurrentMemory,
 		TargetMemory:              res.RightSizing.TargetMemory,
-		Preferences:               preferences,
+		Preferences:               item.Preferences,
 	})
 }
 
@@ -150,25 +193,17 @@ func (m *App) ProcessRegion(cfg aws.Config) {
 }
 
 func (m *App) ProcessAllRegions(cfg aws.Config) {
-	m.status = "Retrieving data from AWS"
+	m.statusChan <- "Retrieving data from AWS"
 	defer func() {
 		if r := recover(); r != nil {
-			m.status = fmt.Sprintf("Failed to retrieve data! Panic: %v", r)
+			m.errorChan <- fmt.Errorf("%v", r)
 			return
 		}
 
-		var err error
-		select {
-		case err = <-m.errorChan:
-			m.status = fmt.Sprintf("Failed to retrieve data! Error: %v", err)
-			return
-		default:
-		}
-
-		m.status = "Successfully finished loading all the data"
+		m.statusChan <- "Successfully fetched all ec2 instances from AWS. "
 	}()
 
-	m.status = "Listing all available regions"
+	m.statusChan <- "Listing all available regions"
 	regionClient := ec2.NewFromConfig(cfg)
 	regions, err := regionClient.DescribeRegions(context.Background(), &ec2.DescribeRegionsInput{AllRegions: aws.Bool(false)})
 	if err != nil {
@@ -179,7 +214,7 @@ func (m *App) ProcessAllRegions(cfg aws.Config) {
 	wg := sync.WaitGroup{}
 	wg.Add(len(regions.Regions))
 
-	m.status = "Fetching all EC2 Instances"
+	m.statusChan <- "Fetching all EC2 Instances"
 	for _, region := range regions.Regions {
 		localCfg := cfg
 		localCfg.Region = *region.RegionName
@@ -231,6 +266,11 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 		}
 
 		for _, p := range page.Metrics {
+			if p.MetricName == nil || (*p.MetricName != "CPUUtilization" &&
+				*p.MetricName != "NetworkIn" &&
+				*p.MetricName != "NetworkOut") {
+				continue
+			}
 			statistics := []types2.Statistic{
 				types2.StatisticAverage,
 				types2.StatisticMinimum,

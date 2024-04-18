@@ -207,7 +207,7 @@ func (m *Ec2InstanceOptimizations) View() string {
 		"  enter: see details\n" +
 		"  p: change preferences for one item\n" +
 		"  P: change preferences for all items\n" +
-		"  q/ctrl+c: exit\n\n"
+		"  q/ctrl+c: exit\n"
 }
 
 func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {

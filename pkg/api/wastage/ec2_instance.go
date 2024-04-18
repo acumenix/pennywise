@@ -37,7 +37,7 @@ type RightSizingRecommendation struct {
 }
 
 type EC2InstanceWastageResponse struct {
-	CurrentCost  float64                   `json:"currentCost"`
-	TotalSavings float64                   `json:"totalSavings"`
-	RightSizing  RightSizingRecommendation `json:"rightSizing"`
+	CurrentCost  float64                    `json:"currentCost"`
+	TotalSavings float64                    `json:"totalSavings"`
+	RightSizing  *RightSizingRecommendation `json:"rightSizing"`
 }

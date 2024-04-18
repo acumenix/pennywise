@@ -118,5 +118,5 @@ func (m *Ec2InstanceDetail) View() string {
 	return baseStyle.Render(m.table.View()) + "\n\n" +
 		"  ↑/↓: move\n" +
 		"  esc: back to ec2 instance list\n" +
-		"  q/ctrl+c: exit\n\n"
+		"  q/ctrl+c: exit\n"
 }
