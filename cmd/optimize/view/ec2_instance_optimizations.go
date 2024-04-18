@@ -3,6 +3,7 @@ package view
 import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	preferences2 "github.com/kaytu-io/pennywise/cmd/optimize/preferences"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -42,6 +43,9 @@ type Ec2InstanceOptimizations struct {
 	items []OptimizationItem
 
 	detailsPage *Ec2InstanceDetail
+	prefConf    *PreferencesConfiguration
+
+	clearScreen bool
 }
 
 func NewEC2InstanceOptimizations() *Ec2InstanceOptimizations {
@@ -73,11 +77,10 @@ func NewEC2InstanceOptimizations() *Ec2InstanceOptimizations {
 	t.SetStyles(s)
 
 	return &Ec2InstanceOptimizations{
-		itemsChan:   make(chan OptimizationItem, 1000),
-		loading:     false,
-		table:       t,
-		items:       nil,
-		detailsPage: nil,
+		itemsChan: make(chan OptimizationItem, 1000),
+		loading:   false,
+		table:     t,
+		items:     nil,
 	}
 }
 
@@ -86,7 +89,11 @@ func (m *Ec2InstanceOptimizations) Init() tea.Cmd { return tickCmdWithDuration(t
 func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.detailsPage != nil {
 		_, cmd := m.detailsPage.Update(msg)
-		return m, cmd
+		return m, tea.Batch(cmd, tickCmdWithDuration(time.Millisecond*50))
+	}
+	if m.prefConf != nil {
+		_, cmd := m.prefConf.Update(msg)
+		return m, tea.Batch(cmd, tickCmdWithDuration(time.Millisecond*50))
 	}
 
 	var cmd, initCmd tea.Cmd
@@ -135,10 +142,15 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc":
-			if m.detailsPage != nil {
-				m.detailsPage = nil
-			}
+		case "q":
+			return m, tea.Quit
+		case "p", "P":
+			m.prefConf = NewPreferencesConfiguration(func(items []preferences2.PreferenceItem) {
+				fmt.Println(items)
+				m.prefConf = nil
+				m.clearScreen = true
+			})
+			initCmd = m.prefConf.Init()
 		case "enter":
 			if len(m.table.SelectedRow()) == 0 {
 				break
@@ -165,8 +177,15 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Ec2InstanceOptimizations) View() string {
+	if m.clearScreen {
+		m.clearScreen = false
+		return ""
+	}
 	if m.detailsPage != nil {
 		return m.detailsPage.View()
+	}
+	if m.prefConf != nil {
+		return m.prefConf.View()
 	}
 	return baseStyle.Render(m.table.View()) + "\n\n" +
 		"  ↑/↓: move\n" +

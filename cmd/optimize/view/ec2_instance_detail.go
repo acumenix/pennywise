@@ -104,6 +104,8 @@ func (m *Ec2InstanceDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "q":
+			return m, tea.Quit
 		case "esc":
 			m.close()
 		}
