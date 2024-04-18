@@ -172,6 +172,7 @@ func (m *PreferencesConfiguration) View() string {
 	}
 	builder.WriteString("\n\n  ↑/↓: move\n" +
 		"  enter: next field\n" +
+		"  ←/→: prev/next value (for fields with specific values)\n" +
 		"  esc: apply and exit\n" +
 		"  tab: pin/unpin value to current ec2 instance \n" +
 		"  ctrl+c: exit\n\n",
