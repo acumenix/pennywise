@@ -166,6 +166,22 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+		case "P":
+			if len(m.table.SelectedRow()) == 0 {
+				break
+			}
+
+			m.prefConf = NewPreferencesConfiguration(preferences2.DefaultPreferences(), func(items []preferences2.PreferenceItem) {
+				for _, i := range m.items {
+					i.Preferences = items
+					i.OptimizationLoading = true
+					m.itemsChan <- i
+					m.instanceChan <- i
+				}
+				m.prefConf = nil
+				m.clearScreen = true
+			})
+			initCmd = m.prefConf.Init()
 		case "enter":
 			if len(m.table.SelectedRow()) == 0 {
 				break
@@ -206,6 +222,7 @@ func (m *Ec2InstanceOptimizations) View() string {
 		"  ↑/↓: move\n" +
 		"  enter: see details\n" +
 		"  p: change preferences for one item\n" +
+		"  P: change preferences for all items\n" +
 		"  q/ctrl+c: exit\n"
 }
 

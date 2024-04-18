@@ -95,6 +95,7 @@ func (m *App) ProcessInstances(awsCfg aws.Config) {
 
 	for item := range m.processInstanceChan {
 		awsCfg.Region = item.Region
+		localAWSCfg := awsCfg
 		localItem := item
 		m.counterMutex.Lock()
 		m.counter++
@@ -103,7 +104,7 @@ func (m *App) ProcessInstances(awsCfg aws.Config) {
 		m.statusChan <- fmt.Sprintf("calculating possible optimizations for %d instances.", localCounter)
 
 		go func() {
-			m.ProcessInstance(config, awsCfg, localItem)
+			m.ProcessInstance(config, localAWSCfg, localItem)
 			m.counterMutex.Lock()
 			defer m.counterMutex.Unlock()
 			m.counter--
@@ -200,7 +201,7 @@ func (m *App) ProcessAllRegions(cfg aws.Config) {
 			return
 		}
 
-		m.statusChan <- "Successfully fetched all ec2 instances from AWS. "
+		m.statusChan <- "Successfully fetched all ec2 instances from AWS. Calculating instance optimizations..."
 	}()
 
 	m.statusChan <- "Listing all available regions"
