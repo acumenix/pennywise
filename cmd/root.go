@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/kaytu-io/pennywise/cmd/cost"
 	"github.com/kaytu-io/pennywise/cmd/diff"
+	"github.com/kaytu-io/pennywise/cmd/optimize"
 	"github.com/kaytu-io/pennywise/cmd/predef"
 	"github.com/spf13/cobra"
 	"os"
@@ -24,10 +25,12 @@ func init() {
 	//rootCmd.AddCommand(ingestion.IngestCmd)
 	rootCmd.AddCommand(cost.CostCmd)
 	rootCmd.AddCommand(diff.DiffCmd)
+	rootCmd.AddCommand(optimize.OptimizeCmd)
 
 	rootCmd.AddCommand(predef.VersionCmd)
 	rootCmd.AddCommand(predef.LoginCmd)
 	rootCmd.AddCommand(predef.LogoutCmd)
+
 	//rootCmd.PersistentFlags().String("server-url", "https://pennywise.kaytu.dev/kaytu", "define the server http address")
 }
 

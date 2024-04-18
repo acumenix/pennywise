@@ -16,7 +16,7 @@ type Config struct {
 
 var ExpiredSession = fmt.Errorf("your session has expired, please login again using `pennywise login`")
 
-func getConfig() (*Config, error) {
+func GetConfig() (*Config, error) {
 	home := os.Getenv("HOME")
 	data, err := os.ReadFile(home + "/.kaytu/pennywise-config.json")
 	if err != nil {

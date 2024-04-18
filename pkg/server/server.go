@@ -34,7 +34,7 @@ type serverClient struct {
 }
 
 func NewPennywiseServerClient(baseURL string) (ServerClient, error) {
-	config, err := getConfig()
+	config, err := GetConfig()
 	if err != nil {
 		return nil, err
 	}
