@@ -25,7 +25,6 @@ type OptimizationItem struct {
 type Ec2InstanceOptimizations struct {
 	itemsChan chan OptimizationItem
 	loading   bool
-	debugMsg  string
 
 	table        table.Model
 	items        []OptimizationItem
@@ -142,7 +141,7 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Ec2InstanceOptimizations) View() string {
-	return m.debugMsg + "\n" + baseStyle.Render(m.table.View()) + "\n"
+	return baseStyle.Render(m.table.View()) + "\n"
 }
 
 func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {
