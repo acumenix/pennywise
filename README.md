@@ -17,7 +17,7 @@ Pennywise estimates the cost of cloud infrastructure before the actual deploymen
 
 **Linux/MacOS**
 ```shell
-curl -fsSL https://kaytu.s3.amazonaws.com/pennywise/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/kaytu-io/pennywise/main/scripts/install.sh | sh
 ```
 
 **Windows**
