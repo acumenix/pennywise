@@ -9,30 +9,52 @@ release:
 checksum: {}
 
 builds:
-  - binary: pennywise
+  - id: linux
+    binary: pennywise
     ldflags:
       - -s -w -X github.com/kaytu-io/pennywise/cmd/predef.VERSION={{ .Version }}
     goos:
       - linux
-      - darwin
-      - windows
     goarch:
       - amd64
       - arm64
     main: ./main.go
-
+  - id: darwin
+    binary: pennywise
+    ldflags:
+      - -s -w -X github.com/kaytu-io/pennywise/cmd/predef.VERSION={{ .Version }}
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./main.go
+  - id: windows
+    binary: pennywise
+    ldflags:
+      - -s -w -X github.com/kaytu-io/pennywise/cmd/predef.VERSION={{ .Version }}
+    goos:
+      - windows
+    main: ./main.go
 archives:
   - id: binary
     format: binary
   - id: default
     format: tar.gz
+    builds: [linux, darwin]
+  - id: windows
+    format: zip
+    builds: [ windows ]
 
 signs:
   - cmd: cosign
     stdin: "{{ .Env.COSIGN_PWD }}"
+    certificate: '${artifact}.pem'
+    output: true
     args:
       - "sign-blob"
       - "--key=env://COSIGN_SECRET"
+      - '--output-certificate=${certificate}'
       - "--output-signature=${signature}"
       - "${artifact}"
       - "--yes"
