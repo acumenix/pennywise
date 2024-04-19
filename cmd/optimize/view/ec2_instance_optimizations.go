@@ -31,8 +31,9 @@ type OptimizationItem struct {
 	TargetNetworkPerformance  string
 	CurrentNetworkPerformance string
 
-	CurrentMemory string
-	TargetMemory  string
+	AvgMemoryUsage string
+	CurrentMemory  string
+	TargetMemory   string
 
 	Preferences []preferences2.PreferenceItem
 }

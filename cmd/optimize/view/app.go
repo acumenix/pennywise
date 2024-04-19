@@ -1,6 +1,8 @@
 package view
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -272,6 +274,21 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 	}
 
 	cloudwatchClient := cloudwatch.NewFromConfig(cfg)
+	startTime := time.Now().Add(-24 * 7 * time.Hour)
+	endTime := time.Now()
+	statistics := []types2.Statistic{
+		types2.StatisticAverage,
+		types2.StatisticMinimum,
+		types2.StatisticMaximum,
+	}
+	dimensionFilter := []types2.Dimension{
+		{
+			Name:  aws.String("InstanceId"),
+			Value: instance.InstanceId,
+		},
+	}
+	metrics := map[string][]types2.Datapoint{}
+
 	paginator := cloudwatch.NewListMetricsPaginator(cloudwatchClient, &cloudwatch.ListMetricsInput{
 		Namespace: aws.String("AWS/EC2"),
 		Dimensions: []types2.DimensionFilter{
@@ -281,10 +298,6 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 			},
 		},
 	})
-	startTime := time.Now().Add(-24 * 7 * time.Hour)
-	endTime := time.Now()
-
-	metrics := map[string][]types2.Datapoint{}
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
@@ -297,22 +310,12 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 				*p.MetricName != "NetworkOut") {
 				continue
 			}
-			statistics := []types2.Statistic{
-				types2.StatisticAverage,
-				types2.StatisticMinimum,
-				types2.StatisticMaximum,
-			}
 
 			// Create input for GetMetricStatistics
 			input := &cloudwatch.GetMetricStatisticsInput{
 				Namespace:  aws.String("AWS/EC2"),
 				MetricName: p.MetricName,
-				Dimensions: []types2.Dimension{
-					{
-						Name:  aws.String("InstanceId"),
-						Value: instance.InstanceId,
-					},
-				},
+				Dimensions: dimensionFilter,
 				StartTime:  aws.Time(startTime),
 				EndTime:    aws.Time(endTime),
 				Period:     aws.Int32(60 * 60), // 1 hour intervals
@@ -328,11 +331,96 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 			metrics[*p.MetricName] = resp.Datapoints
 		}
 	}
+
+	paginator = cloudwatch.NewListMetricsPaginator(cloudwatchClient, &cloudwatch.ListMetricsInput{
+		Namespace: aws.String("CWAgent"),
+		Dimensions: []types2.DimensionFilter{
+			{
+				Name:  aws.String("InstanceId"),
+				Value: instance.InstanceId,
+			},
+		},
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, p := range page.Metrics {
+			if p.MetricName == nil || (*p.MetricName != "mem_used_percent") {
+				continue
+			}
+
+			// Create input for GetMetricStatistics
+			input := &cloudwatch.GetMetricStatisticsInput{
+				Namespace:  aws.String("CWAgent"),
+				MetricName: p.MetricName,
+				Dimensions: dimensionFilter,
+				StartTime:  aws.Time(startTime),
+				EndTime:    aws.Time(endTime),
+				Period:     aws.Int32(60 * 60), // 1 hour intervals
+				Statistics: statistics,
+			}
+
+			// Get metric data
+			resp, err := cloudwatchClient.GetMetricStatistics(ctx, input)
+			if err != nil {
+				return nil, err
+			}
+
+			metrics[*p.MetricName] = resp.Datapoints
+		}
+	}
+
+	var monitoring *types.MonitoringState
+	if instance.Monitoring != nil {
+		monitoring = &instance.Monitoring.State
+	}
+	var placement *wastage.EC2Placement
+	if instance.Placement != nil {
+		placement = &wastage.EC2Placement{
+			Tenancy:          instance.Placement.Tenancy,
+			AvailabilityZone: *instance.Placement.AvailabilityZone,
+			HashedHostId:     hashString(*instance.Placement.HostId),
+		}
+	}
+
+	var volumes []wastage.EC2Volume
+	for _, v := range res.Volumes {
+		volumes = append(volumes, toEBSVolume(v))
+	}
+
 	return &wastage.EC2InstanceWastageRequest{
-		Instance:    instance,
-		Volumes:     res.Volumes,
+		Instance: wastage.EC2Instance{
+			HashedInstanceId:  hashString(*instance.InstanceId),
+			State:             instance.State.Name,
+			InstanceType:      instance.InstanceType,
+			Platform:          instance.Platform,
+			ThreadsPerCore:    *instance.CpuOptions.ThreadsPerCore,
+			CoreCount:         *instance.CpuOptions.CoreCount,
+			EbsOptimized:      *instance.EbsOptimized,
+			InstanceLifecycle: instance.InstanceLifecycle,
+			Monitoring:        monitoring,
+			Placement:         placement,
+		},
+		Volumes:     volumes,
 		Metrics:     metrics,
 		Region:      cfg.Region,
 		Preferences: preferences,
 	}, nil
+}
+
+func toEBSVolume(v types.Volume) wastage.EC2Volume {
+	return wastage.EC2Volume{
+		HashedVolumeId: hashString(*v.VolumeId),
+		VolumeType:     v.VolumeType,
+		Size:           *v.Size,
+		Iops:           *v.Iops,
+	}
+}
+
+func hashString(str string) string {
+	h := sha256.New()
+	return hex.EncodeToString(h.Sum([]byte(str)))
 }
