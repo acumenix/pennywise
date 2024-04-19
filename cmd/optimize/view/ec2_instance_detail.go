@@ -91,7 +91,7 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		},
 		{
 			"Total Saving (Monthly)",
-			"$0",
+			"",
 			"",
 			fmt.Sprintf("$%v", item.TotalSaving),
 		},

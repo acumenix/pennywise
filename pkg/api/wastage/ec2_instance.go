@@ -38,11 +38,12 @@ type EC2Volume struct {
 }
 
 type EC2InstanceWastageRequest struct {
-	Instance    EC2Instance                   `json:"instance"`
-	Volumes     []EC2Volume                   `json:"volumes"`
-	Metrics     map[string][]types2.Datapoint `json:"metrics"`
-	Region      string                        `json:"region"`
-	Preferences map[string]*string            `json:"preferences"`
+	HashedAccountID string                        `json:"hashedAccountID"`
+	Instance        EC2Instance                   `json:"instance"`
+	Volumes         []EC2Volume                   `json:"volumes"`
+	Metrics         map[string][]types2.Datapoint `json:"metrics"`
+	Region          string                        `json:"region"`
+	Preferences     map[string]*string            `json:"preferences"`
 }
 
 type RightSizingRecommendation struct {

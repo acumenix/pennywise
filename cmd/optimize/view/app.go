@@ -1,8 +1,6 @@
 package view
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -14,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	preferences2 "github.com/kaytu-io/pennywise/cmd/optimize/preferences"
 	"github.com/kaytu-io/pennywise/pkg/api/wastage"
+	"github.com/kaytu-io/pennywise/pkg/hash"
 	"github.com/kaytu-io/pennywise/pkg/server"
 	"github.com/muesli/reflow/wordwrap"
 	"golang.org/x/net/context"
@@ -42,7 +41,7 @@ var (
 	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 )
 
-func NewApp(cfg aws.Config) *App {
+func NewApp(cfg aws.Config, accountHash string) *App {
 	pi := make(chan OptimizationItem, 1000)
 	r := &App{
 		status:              "",
@@ -53,7 +52,7 @@ func NewApp(cfg aws.Config) *App {
 	}
 	go r.UpdateStatus()
 	go r.ProcessAllRegions(cfg)
-	go r.ProcessInstances(cfg)
+	go r.ProcessInstances(cfg, accountHash)
 	return r
 }
 
@@ -101,7 +100,7 @@ func (m *App) UpdateStatus() {
 	}
 }
 
-func (m *App) ProcessInstances(awsCfg aws.Config) {
+func (m *App) ProcessInstances(awsCfg aws.Config, accountHash string) {
 	config, err := server.GetConfig()
 	if err != nil {
 		m.errorChan <- err
@@ -119,7 +118,7 @@ func (m *App) ProcessInstances(awsCfg aws.Config) {
 		m.statusChan <- fmt.Sprintf("calculating possible optimizations for %d instances.", localCounter)
 
 		go func() {
-			m.ProcessInstance(config, localAWSCfg, localItem)
+			m.ProcessInstance(config, localAWSCfg, localItem, accountHash)
 			m.counterMutex.Lock()
 			defer m.counterMutex.Unlock()
 			m.counter--
@@ -128,14 +127,14 @@ func (m *App) ProcessInstances(awsCfg aws.Config) {
 	}
 }
 
-func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, item OptimizationItem) {
+func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, item OptimizationItem, accountHash string) {
 	defer func() {
 		if r := recover(); r != nil {
 			m.errorChan <- fmt.Errorf("%v", r)
 		}
 	}()
 
-	req, err := getEc2InstanceRequestData(context.Background(), awsConf, item.Instance, preferences2.Export(item.Preferences))
+	req, err := getEc2InstanceRequestData(context.Background(), awsConf, item.Instance, preferences2.Export(item.Preferences), accountHash)
 	if err != nil {
 		m.errorChan <- err
 		return
@@ -255,7 +254,7 @@ func (m *App) ProcessAllRegions(cfg aws.Config) {
 	wg.Wait()
 }
 
-func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance types.Instance, preferences map[string]*string) (*wastage.EC2InstanceWastageRequest, error) {
+func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance types.Instance, preferences map[string]*string, accountHash string) (*wastage.EC2InstanceWastageRequest, error) {
 	client := ec2.NewFromConfig(cfg)
 
 	var volumeIds []string
@@ -382,7 +381,7 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 		placement = &wastage.EC2Placement{
 			Tenancy:          instance.Placement.Tenancy,
 			AvailabilityZone: *instance.Placement.AvailabilityZone,
-			HashedHostId:     hashString(*instance.Placement.HostId),
+			HashedHostId:     hash.HashString(*instance.Placement.HostId),
 		}
 	}
 
@@ -392,8 +391,9 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 	}
 
 	return &wastage.EC2InstanceWastageRequest{
+		HashedAccountID: accountHash,
 		Instance: wastage.EC2Instance{
-			HashedInstanceId:  hashString(*instance.InstanceId),
+			HashedInstanceId:  hash.HashString(*instance.InstanceId),
 			State:             instance.State.Name,
 			InstanceType:      instance.InstanceType,
 			Platform:          instance.Platform,
@@ -413,14 +413,9 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 
 func toEBSVolume(v types.Volume) wastage.EC2Volume {
 	return wastage.EC2Volume{
-		HashedVolumeId: hashString(*v.VolumeId),
+		HashedVolumeId: hash.HashString(*v.VolumeId),
 		VolumeType:     v.VolumeType,
 		Size:           *v.Size,
 		Iops:           *v.Iops,
 	}
-}
-
-func hashString(str string) string {
-	h := sha256.New()
-	return hex.EncodeToString(h.Sum([]byte(str)))
 }
