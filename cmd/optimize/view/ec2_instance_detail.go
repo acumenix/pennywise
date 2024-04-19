@@ -115,8 +115,10 @@ func (m *Ec2InstanceDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Ec2InstanceDetail) View() string {
-	return baseStyle.Render(m.table.View()) + "\n\n" +
-		"  ↑/↓: move\n" +
-		"  esc: back to ec2 instance list\n" +
-		"  q/ctrl+c: exit\n"
+	return baseStyle.Render(m.table.View()) +
+		helpStyle.Render(`
+↑/↓: move
+esc: back to ec2 instance list
+q/ctrl+c: exit
+`)
 }

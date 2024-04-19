@@ -218,12 +218,14 @@ func (m *Ec2InstanceOptimizations) View() string {
 	if m.prefConf != nil {
 		return m.prefConf.View()
 	}
-	return baseStyle.Render(m.table.View()) + "\n\n" +
-		"  ↑/↓: move\n" +
-		"  enter: see details\n" +
-		"  p: change preferences for one item\n" +
-		"  P: change preferences for all items\n" +
-		"  q/ctrl+c: exit\n"
+	return baseStyle.Render(m.table.View()) +
+		helpStyle.Render(`
+↑/↓: move
+enter: see details
+p: change preferences for one item
+P: change preferences for all items
+q/ctrl+c: exit
+`)
 }
 
 func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {

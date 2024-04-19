@@ -7,10 +7,13 @@ import (
 	types2 "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	preferences2 "github.com/kaytu-io/pennywise/cmd/optimize/preferences"
 	"github.com/kaytu-io/pennywise/pkg/api/wastage"
 	"github.com/kaytu-io/pennywise/pkg/server"
+	"github.com/muesli/reflow/wordwrap"
 	"golang.org/x/net/context"
 	"strings"
 	"sync"
@@ -28,7 +31,14 @@ type App struct {
 
 	counter      int64
 	counterMutex sync.RWMutex
+	width        int
+	height       int
 }
+
+var (
+	helpStyle  = list.DefaultStyles().HelpStyle.PaddingLeft(4).Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"})
+	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+)
 
 func NewApp(cfg aws.Config) *App {
 	pi := make(chan OptimizationItem, 1000)
@@ -53,6 +63,9 @@ func (m *App) Init() tea.Cmd {
 
 func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -69,7 +82,7 @@ func (m *App) View() string {
 	sb.WriteString(m.optimizationsTable.View())
 	sb.WriteString("\n  status: " + m.status + "\n")
 	if len(m.statusErr) > 0 {
-		sb.WriteString("  error: " + m.statusErr + "\n")
+		sb.WriteString(errorStyle.Render(wordwrap.String("  error: "+m.statusErr, m.width)) + "\n")
 	}
 	sb.WriteString("\n\n")
 	return sb.String()
