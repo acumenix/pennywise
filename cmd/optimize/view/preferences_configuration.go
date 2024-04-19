@@ -53,9 +53,9 @@ func NewPreferencesConfiguration(preferences []preferences2.PreferenceItem, clos
 			if pref.Value != nil {
 				in.SetValue(*pref.Value)
 			}
-		}
-		if pref.IsNumber {
-			in.Validate = numberValidator
+			if pref.IsNumber {
+				in.Validate = numberValidator
+			}
 		}
 		inputs = append(inputs, in)
 	}
@@ -93,6 +93,9 @@ func (m *PreferencesConfiguration) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					in.SetValue(pref.PossibleValues[0])
 					in.CursorStart()
 				}
+				if pref.IsNumber {
+					in.Validate = numberValidator
+				}
 			}
 			m.pref[m.focused] = pref
 			m.inputs[m.focused] = in
@@ -114,6 +117,9 @@ func (m *PreferencesConfiguration) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			l := len(m.pref[m.focused].PossibleValues)
 			if l > 0 {
 				m.valueFocus = (m.valueFocus - 1) % l
+				if m.valueFocus < 0 {
+					m.valueFocus = l - 1
+				}
 				m.inputs[m.focused].SetValue(m.pref[m.focused].PossibleValues[m.valueFocus])
 				m.inputs[m.focused].CursorStart()
 			}
@@ -189,8 +195,14 @@ func pinnedValidator(s string) error {
 }
 
 func numberValidator(s string) error {
-	_, err := strconv.ParseInt(s, 10, 64)
-	return err
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	if n < 0 {
+		return errors.New("invalid number")
+	}
+	return nil
 }
 
 func (m *PreferencesConfiguration) nextInput() {
