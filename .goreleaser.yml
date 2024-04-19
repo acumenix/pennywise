@@ -49,12 +49,9 @@ archives:
 signs:
   - cmd: cosign
     stdin: "{{ .Env.COSIGN_PWD }}"
-    certificate: '${artifact}.pem'
-    output: true
     args:
       - "sign-blob"
       - "--key=env://COSIGN_SECRET"
-      - '--output-certificate=${certificate}'
       - "--output-signature=${signature}"
       - "${artifact}"
       - "--yes"
