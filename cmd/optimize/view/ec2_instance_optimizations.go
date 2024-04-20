@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	preferences2 "github.com/kaytu-io/pennywise/cmd/optimize/preferences"
+	"github.com/kaytu-io/pennywise/pkg/api/wastage"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -17,25 +18,14 @@ var baseStyle = lipgloss.NewStyle().
 
 type OptimizationItem struct {
 	Instance            types.Instance
+	Volumes             []types.Volume
 	Region              string
 	OptimizationLoading bool
-	TargetInstanceType  string
-	TotalSaving         float64
-	CurrentCost         float64
-	TargetCost          float64
-
-	AvgCPUUsage string
-	TargetCores string
-
-	AvgNetworkBandwidth       string
-	TargetNetworkPerformance  string
-	CurrentNetworkPerformance string
 
 	AvgMemoryUsage string
-	CurrentMemory  string
-	TargetMemory   string
 
-	Preferences []preferences2.PreferenceItem
+	Preferences               []preferences2.PreferenceItem
+	RightSizingRecommendation wastage.RightSizingRecommendation
 }
 
 type Ec2InstanceOptimizations struct {
@@ -125,8 +115,8 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						string(i.Instance.InstanceType),
 						i.Region,
 						*i.Instance.PlatformDetails,
-						i.TargetInstanceType,
-						fmt.Sprintf("$%v", i.TotalSaving),
+						i.RightSizingRecommendation.TargetInstanceType,
+						fmt.Sprintf("$%v", i.RightSizingRecommendation.Saving),
 					}
 					if i.OptimizationLoading {
 						row[4] = "..."

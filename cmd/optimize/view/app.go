@@ -134,7 +134,23 @@ func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, item Op
 		}
 	}()
 
-	req, err := getEc2InstanceRequestData(context.Background(), awsConf, item.Instance, preferences2.Export(item.Preferences), accountHash)
+	client := ec2.NewFromConfig(awsConf)
+	var volumeIds []string
+	for _, bd := range item.Instance.BlockDeviceMappings {
+		if bd.Ebs == nil {
+			continue
+		}
+		volumeIds = append(volumeIds, *bd.Ebs.VolumeId)
+	}
+	volumesResp, err := client.DescribeVolumes(context.Background(), &ec2.DescribeVolumesInput{
+		VolumeIds: volumeIds,
+	})
+	if err != nil {
+		m.errorChan <- err
+		return
+	}
+
+	req, err := getEc2InstanceRequestData(context.Background(), awsConf, item.Instance, volumesResp.Volumes, preferences2.Export(item.Preferences), accountHash)
 	if err != nil {
 		m.errorChan <- err
 		return
@@ -152,19 +168,10 @@ func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, item Op
 
 	m.optimizationsTable.SendItem(OptimizationItem{
 		Instance:                  item.Instance,
+		Volumes:                   volumesResp.Volumes,
 		Region:                    awsConf.Region,
 		OptimizationLoading:       false,
-		TargetInstanceType:        res.RightSizing.TargetInstanceType,
-		TotalSaving:               res.RightSizing.Saving,
-		CurrentCost:               res.RightSizing.CurrentCost,
-		TargetCost:                res.RightSizing.TargetCost,
-		AvgCPUUsage:               res.RightSizing.AvgCPUUsage,
-		TargetCores:               res.RightSizing.TargetCores,
-		AvgNetworkBandwidth:       res.RightSizing.AvgNetworkBandwidth,
-		TargetNetworkPerformance:  res.RightSizing.TargetNetworkPerformance,
-		CurrentNetworkPerformance: res.RightSizing.CurrentNetworkPerformance,
-		CurrentMemory:             res.RightSizing.CurrentMemory,
-		TargetMemory:              res.RightSizing.TargetMemory,
+		RightSizingRecommendation: *res.RightSizing,
 		Preferences:               item.Preferences,
 	})
 }
@@ -208,8 +215,6 @@ func (m *App) ProcessRegion(cfg aws.Config) {
 					Instance:            v,
 					Region:              cfg.Region,
 					OptimizationLoading: true,
-					TargetInstanceType:  "",
-					TotalSaving:         0,
 					Preferences:         preferences,
 				}
 				m.optimizationsTable.SendItem(oi)
@@ -254,23 +259,7 @@ func (m *App) ProcessAllRegions(cfg aws.Config) {
 	wg.Wait()
 }
 
-func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance types.Instance, preferences map[string]*string, accountHash string) (*wastage.EC2InstanceWastageRequest, error) {
-	client := ec2.NewFromConfig(cfg)
-
-	var volumeIds []string
-	for _, bd := range instance.BlockDeviceMappings {
-		if bd.Ebs == nil {
-			continue
-		}
-		volumeIds = append(volumeIds, *bd.Ebs.VolumeId)
-	}
-
-	res, err := client.DescribeVolumes(ctx, &ec2.DescribeVolumesInput{
-		VolumeIds: volumeIds,
-	})
-	if err != nil {
-		return nil, err
-	}
+func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance types.Instance, volumes []types.Volume, preferences map[string]*string, accountHash string) (*wastage.EC2InstanceWastageRequest, error) {
 
 	cloudwatchClient := cloudwatch.NewFromConfig(cfg)
 	startTime := time.Now().Add(-24 * 7 * time.Hour)
@@ -389,11 +378,63 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 		}
 	}
 
-	var volumes []wastage.EC2Volume
-	for _, v := range res.Volumes {
-		volumes = append(volumes, toEBSVolume(v))
-	}
+	var kaytuVolumes []wastage.EC2Volume
+	volumeMetrics := map[string]map[string][]types2.Datapoint{}
+	for _, v := range volumes {
+		kaytuVolumes = append(kaytuVolumes, toEBSVolume(v))
 
+		paginator := cloudwatch.NewListMetricsPaginator(cloudwatchClient, &cloudwatch.ListMetricsInput{
+			Namespace: aws.String("AWS/EBS"),
+			Dimensions: []types2.DimensionFilter{
+				{
+					Name:  aws.String("VolumeId"),
+					Value: v.VolumeId,
+				},
+			},
+		})
+		for paginator.HasMorePages() {
+			page, err := paginator.NextPage(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, p := range page.Metrics {
+				if p.MetricName == nil || (*p.MetricName != "VolumeReadOps" &&
+					*p.MetricName != "VolumeWriteOps" &&
+					*p.MetricName != "VolumeReadBytes" &&
+					*p.MetricName != "VolumeWriteBytes") {
+					continue
+				}
+
+				// Create input for GetMetricStatistics
+				input := &cloudwatch.GetMetricStatisticsInput{
+					Namespace:  aws.String("AWS/EBS"),
+					MetricName: p.MetricName,
+					Dimensions: []types2.Dimension{
+						{
+							Name:  aws.String("VolumeId"),
+							Value: v.VolumeId,
+						},
+					},
+					StartTime:  aws.Time(startTime),
+					EndTime:    aws.Time(endTime),
+					Period:     aws.Int32(60 * 60), // 1 hour intervals
+					Statistics: statistics,
+				}
+
+				// Get metric data
+				resp, err := cloudwatchClient.GetMetricStatistics(ctx, input)
+				if err != nil {
+					return nil, err
+				}
+
+				if _, ok := volumeMetrics[hash.HashString(*v.VolumeId)]; !ok {
+					volumeMetrics[hash.HashString(*v.VolumeId)] = make(map[string][]types2.Datapoint)
+				}
+				volumeMetrics[hash.HashString(*v.VolumeId)][*p.MetricName] = resp.Datapoints
+			}
+		}
+	}
 	return &wastage.EC2InstanceWastageRequest{
 		HashedAccountID: accountHash,
 		Instance: wastage.EC2Instance{
@@ -408,18 +449,21 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 			Monitoring:        monitoring,
 			Placement:         placement,
 		},
-		Volumes:     volumes,
-		Metrics:     metrics,
-		Region:      cfg.Region,
-		Preferences: preferences,
+		Volumes:       kaytuVolumes,
+		Metrics:       metrics,
+		VolumeMetrics: volumeMetrics,
+		Region:        cfg.Region,
+		Preferences:   preferences,
 	}, nil
 }
 
 func toEBSVolume(v types.Volume) wastage.EC2Volume {
 	return wastage.EC2Volume{
-		HashedVolumeId: hash.HashString(*v.VolumeId),
-		VolumeType:     v.VolumeType,
-		Size:           *v.Size,
-		Iops:           *v.Iops,
+		HashedVolumeId:   hash.HashString(*v.VolumeId),
+		VolumeType:       v.VolumeType,
+		Size:             v.Size,
+		Iops:             v.Iops,
+		AvailabilityZone: v.AvailabilityZone,
+		Throughput:       v.Throughput,
 	}
 }

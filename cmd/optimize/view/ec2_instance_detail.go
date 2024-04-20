@@ -5,15 +5,123 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/kaytu-io/pennywise/pkg/hash"
 )
 
 type Ec2InstanceDetail struct {
-	item        OptimizationItem
-	close       func()
-	deviceTable table.Model
-	detailTable table.Model
-	width       int
-	height      int
+	item             OptimizationItem
+	close            func()
+	deviceTable      table.Model
+	detailTable      table.Model
+	deviceProperties map[string][]table.Row
+	width            int
+	height           int
+	selectedDevice   string
+}
+
+func ExtractProperties(item OptimizationItem) map[string][]table.Row {
+	res := map[string][]table.Row{
+		*item.Instance.InstanceId: {
+			{
+				"Instance ID",
+				*item.Instance.InstanceId,
+				"",
+				"",
+			},
+			{
+				"Region",
+				item.Region,
+				"",
+				"",
+			},
+			{
+				"Instance Type",
+				string(item.Instance.InstanceType),
+				"",
+				item.RightSizingRecommendation.TargetInstanceType,
+			},
+			{
+				"vCPU",
+				fmt.Sprintf("%v", *item.Instance.CpuOptions.CoreCount**item.Instance.CpuOptions.ThreadsPerCore),
+				item.RightSizingRecommendation.AvgCPUUsage,
+				item.RightSizingRecommendation.TargetCores,
+			},
+			{
+				"Memory",
+				item.RightSizingRecommendation.CurrentMemory,
+				item.AvgMemoryUsage,
+				item.RightSizingRecommendation.TargetMemory,
+			},
+			{
+				"Bandwidth",
+				item.RightSizingRecommendation.CurrentNetworkPerformance,
+				item.RightSizingRecommendation.AvgNetworkBandwidth,
+				item.RightSizingRecommendation.TargetNetworkPerformance,
+			},
+			{
+				"Total Cost (Monthly)",
+				fmt.Sprintf("$%v", item.RightSizingRecommendation.CurrentCost),
+				"",
+				fmt.Sprintf("$%v", item.RightSizingRecommendation.TargetCost),
+			},
+			{
+				"Total Saving (Monthly)",
+				"",
+				"",
+				fmt.Sprintf("$%v", item.RightSizingRecommendation.Saving),
+			},
+		},
+	}
+
+	for _, v := range item.Volumes {
+		vid := hash.HashString(*v.VolumeId)
+		res[*v.VolumeId] = []table.Row{
+			{
+				"Volume ID",
+				*v.VolumeId,
+				"",
+				"",
+			},
+			{
+				"Volume Type",
+				string(v.VolumeType),
+				"",
+				string(item.RightSizingRecommendation.VolumesTargetTypes[vid]),
+			},
+			{
+				"Size",
+				fmt.Sprintf("%d GB", *v.Size),
+				"",
+				fmt.Sprintf("%d GB", item.RightSizingRecommendation.VolumesTargetSizes[vid]),
+			},
+			{
+				"IOPS",
+				fmt.Sprintf("%d", *v.Iops),
+				"",
+				fmt.Sprintf("%d", item.RightSizingRecommendation.VolumesTargetIOPS[vid]),
+			},
+			{
+				"Throughput",
+				fmt.Sprintf("%d Mbps", *v.Throughput),
+				"",
+				fmt.Sprintf("%d Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid]),
+			},
+			{
+				"Total Cost (Monthly)",
+				fmt.Sprintf("$%v", item.RightSizingRecommendation.VolumesCurrentCosts[vid]),
+				"",
+				fmt.Sprintf("$%v", item.RightSizingRecommendation.VolumesTargetCosts[vid]),
+			},
+			{
+				"Total Saving (Monthly)",
+				"",
+				"",
+				fmt.Sprintf("$%v", item.RightSizingRecommendation.VolumesSaving[vid]),
+			},
+		}
+	}
+
+	return res
 }
 
 func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetail {
@@ -27,8 +135,8 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		{
 			*item.Instance.InstanceId,
 			"EC2 Instance",
-			fmt.Sprintf("%.2f", item.CurrentCost),
-			fmt.Sprintf("%.2f", item.CurrentCost-item.TargetCost),
+			fmt.Sprintf("%.2f", item.RightSizingRecommendation.CurrentCost),
+			fmt.Sprintf("%.2f", item.RightSizingRecommendation.CurrentCost-item.RightSizingRecommendation.TargetCost),
 		},
 	}
 	for _, v := range item.Instance.BlockDeviceMappings {
@@ -46,63 +154,12 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		{Title: "Utilization", Width: 20},
 		{Title: "Suggested", Width: 20},
 	}
-	detailRows := []table.Row{
-		{
-			"Instance ID",
-			*item.Instance.InstanceId,
-			"",
-			"",
-		},
-		{
-			"Region",
-			item.Region,
-			"",
-			"",
-		},
-		{
-			"Instance Type",
-			string(item.Instance.InstanceType),
-			"",
-			item.TargetInstanceType,
-		},
-		{
-			"vCPU",
-			fmt.Sprintf("%v", *item.Instance.CpuOptions.CoreCount**item.Instance.CpuOptions.ThreadsPerCore),
-			item.AvgCPUUsage,
-			item.TargetCores,
-		},
-		{
-			"Memory",
-			item.CurrentMemory,
-			item.AvgMemoryUsage,
-			item.TargetMemory,
-		},
-		{
-			"Bandwidth",
-			item.CurrentNetworkPerformance,
-			item.AvgNetworkBandwidth,
-			item.TargetNetworkPerformance,
-		},
-		{
-			"Total Cost (Monthly)",
-			fmt.Sprintf("$%v", item.CurrentCost),
-			"",
-			fmt.Sprintf("$%v", item.TargetCost),
-		},
-		{
-			"Total Saving (Monthly)",
-			"",
-			"",
-			fmt.Sprintf("$%v", item.TotalSaving),
-		},
-	}
 
 	model := Ec2InstanceDetail{
 		item:  item,
 		close: close,
 		detailTable: table.New(
 			table.WithColumns(detailColumns),
-			table.WithRows(detailRows),
 			table.WithFocused(false),
 			table.WithHeight(8),
 		),
@@ -135,6 +192,7 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 
 	model.detailTable.SetStyles(detailStyle)
 	model.deviceTable.SetStyles(deviceStyle)
+	model.deviceProperties = ExtractProperties(item)
 	return &model
 }
 
@@ -158,6 +216,12 @@ func (m *Ec2InstanceDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.deviceTable, cmd = m.deviceTable.Update(msg)
+	if m.deviceTable.SelectedRow() != nil {
+		if m.selectedDevice != m.deviceTable.SelectedRow()[0] {
+			m.selectedDevice = m.deviceTable.SelectedRow()[0]
+			m.detailTable.SetRows(m.deviceProperties[m.selectedDevice])
+		}
+	}
 	//m.detailTable, detailCMD = m.detailTable.Update(msg)
 	return m, tea.Batch(detailCMD, cmd)
 }
