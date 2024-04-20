@@ -379,9 +379,13 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 	var placement *wastage.EC2Placement
 	if instance.Placement != nil {
 		placement = &wastage.EC2Placement{
-			Tenancy:          instance.Placement.Tenancy,
-			AvailabilityZone: *instance.Placement.AvailabilityZone,
-			HashedHostId:     hash.HashString(*instance.Placement.HostId),
+			Tenancy: instance.Placement.Tenancy,
+		}
+		if instance.Placement.AvailabilityZone != nil {
+			placement.AvailabilityZone = *instance.Placement.AvailabilityZone
+		}
+		if instance.Placement.HostId != nil {
+			placement.HashedHostId = hash.HashString(*instance.Placement.HostId)
 		}
 	}
 
