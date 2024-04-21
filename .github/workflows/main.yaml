@@ -46,40 +46,40 @@ jobs:
         with:
           name: new_tag
           path: new_tag.txt
-#  release:
-#    runs-on: ubuntu-latest
-#    needs:
-#      - tag
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#        with:
-#          fetch-depth: 0
-#          token: ${{ secrets.GH_TOKEN }}
-#      - name: Set up Go
-#        uses: actions/setup-go@v4
-#        with:
-#          go-version: stable
-#      - name: Install cosign
-#        run: |
-#          curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
-#          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
-#          sudo chmod +x /usr/local/bin/cosign
-#      - name: Run GoReleaser
-#        uses: goreleaser/goreleaser-action@v5
-#        with:
-#          distribution: goreleaser
-#          version: latest
-#          args: release --clean
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-#          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
-#          COSIGN_SECRET: ${{ secrets.COSIGN_SECRET }}
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - tag
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: stable
+      - name: Install cosign
+        run: |
+          curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
+          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
+          sudo chmod +x /usr/local/bin/cosign
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
+          COSIGN_SECRET: ${{ secrets.COSIGN_SECRET }}
   sign-windows:
     runs-on: ubuntu-latest
     needs:
       - tag
-#      - release
+      - release
     steps:
       - name: Download new tag
         uses: actions/download-artifact@v2
@@ -93,19 +93,19 @@ jobs:
         id: download_release_386
         with:
           repository: "kaytu-io/pennywise"
-          fileName: "pennywise_*_windows_386.exe"
+          fileName: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe
           latest: true
       - uses: robinraju/release-downloader@v1.10
         id: download_release_arm64
         with:
           repository: "kaytu-io/pennywise"
-          fileName: "pennywise_*_windows_arm64.exe"
+          fileName: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe
           latest: true
       - uses: robinraju/release-downloader@v1.10
         id: download_release_amd64
         with:
           repository: "kaytu-io/pennywise"
-          fileName: "pennywise_*_windows_amd64.exe"
+          fileName: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe
           latest: true
       - name: Sign executable
         id: sign_executable
@@ -113,22 +113,19 @@ jobs:
           CODESIGN_KEY: ${{ secrets.SELFSIGNED_KEY}}
           CODESIGN_CRT: ${{ secrets.SELFSIGNED_CRT}}
         run: |
-          echo "here1"
-          echo ${{ steps.set_new_tag.outputs.new_tag }}
-          echo "here2"
           sudo apt update -y && sudo apt -y install cmake libssl-dev libcurl4-openssl-dev zlib1g-dev python3
           sudo apt-get update -y
           sudo apt-get -y install osslsigncode
           echo "${{ secrets.SELFSIGNED_KEY }}" | base64 --decode > cert.key
           echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode > cert.crt
-          echo "${{ fromJson(steps.download_release_386.outputs.downloaded_files)[0] }}" > pennywise_windows_386.exe
-          echo "${{ fromJson(steps.download_release_arm64.outputs.downloaded_files)[0] }}" > pennywise_windows_arm64.exe
-          echo "${{ fromJson(steps.download_release_amd64.outputs.downloaded_files)[0] }}" > pennywise_windows_amd64.exe
-          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in "pennywise_windows_386.exe" -out "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.exe"
+          echo "${{ fromJson(steps.download_release_386.outputs.downloaded_files)[0] }}" > pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe
+          echo "${{ fromJson(steps.download_release_arm64.outputs.downloaded_files)[0] }}" > pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe
+          echo "${{ fromJson(steps.download_release_amd64.outputs.downloaded_files)[0] }}" > pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe
+          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe" -out "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.exe"
           zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.zip "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.exe"
-          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in "pennywise_windows_arm64.exe" -out "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.exe"
+          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe" -out "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.exe"
           zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.zip "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.exe"
-          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in "pennywise_windows_amd64.exe" -out "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe"
+          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe" -out "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe"
           zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip "pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe"
           export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/kaytu-io/pennywise/releases/latest" | jq -r .upload_url)
           echo "here1"
