@@ -148,8 +148,8 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		{
 			*item.Instance.InstanceId,
 			"EC2 Instance",
-			fmt.Sprintf("%.2f", item.RightSizingRecommendation.CurrentCost),
-			fmt.Sprintf("%.2f", item.RightSizingRecommendation.CurrentCost-item.RightSizingRecommendation.TargetCost),
+			fmt.Sprintf("$%.2f", item.RightSizingRecommendation.CurrentCost),
+			fmt.Sprintf("$%.2f", item.RightSizingRecommendation.CurrentCost-item.RightSizingRecommendation.TargetCost),
 		},
 	}
 	for _, v := range item.Instance.BlockDeviceMappings {
