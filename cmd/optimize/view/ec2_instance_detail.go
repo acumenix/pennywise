@@ -259,6 +259,7 @@ func (m *Ec2InstanceDetail) IsResponsive() bool {
 
 func (m *Ec2InstanceDetail) SetHeight(height int) {
 	m.height = height
+	m.help.SetHeight(m.height - (len(m.detailTable.Rows()) + 4 + len(m.deviceTable.Rows()) + 4))
 }
 
 func (m *Ec2InstanceDetail) MinHeight() int {

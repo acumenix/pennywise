@@ -236,8 +236,9 @@ func (m *PreferencesConfiguration) IsResponsive() bool {
 
 func (m *PreferencesConfiguration) SetHeight(height int) {
 	m.height = height
+	m.help.SetHeight(m.height - (len(m.pref) + 2))
 }
 
 func (m *PreferencesConfiguration) MinHeight() int {
-	return len(m.pref) + 2 + m.help.height
+	return len(m.pref) + 2 + m.help.MinHeight()
 }
