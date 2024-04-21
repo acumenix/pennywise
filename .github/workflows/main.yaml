@@ -38,8 +38,8 @@ jobs:
       - name: Save new tag
         id: save_new_tag
         run: |
-#          version=${{ steps.tag_version.outputs.new_tag }}
-#          version=${version#v}
+          version=${{ steps.tag_version.outputs.new_tag }}
+          version=${version#v}
           echo "1.8.15" > new_tag.txt
       - name: Upload new tag
         uses: actions/upload-artifact@v2
