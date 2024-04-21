@@ -64,3 +64,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
           COSIGN_SECRET: ${{ secrets.COSIGN_SECRET }}
+  sign-windows:
+    runs-on: ubuntu-latest
+    needs:
+      - release
+    steps:
+      - name: Sign executable
+        env:
+          CODESIGN_KEY: ${{ secrets.SELFSIGNED_KEY}}
+          CODESIGN_CRT: ${{ secrets.SELFSIGNED_CRT}}
+        run: |
+          sudo apt update -y && sudo apt -y install cmake libssl-dev libcurl4-openssl-dev zlib1g-dev python3
+          sudo apt-get update -y
+          sudo apt-get -y install osslsigncode
+          echo $CODESIGN_KEY > cert.key
+          echo $CODESIGN_CRT > cert.crt
+          osslsigncode sign -certs cert.crt -key cert.key \
+                  -n "Pennywise" -i https://kaytu.io/ \
+                  -in target/release/pennywise_1.8.3_windows_386.exe  -out target/release/pennywise_1.8.3_windows_386_signed.exe
