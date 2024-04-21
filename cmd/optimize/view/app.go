@@ -176,6 +176,18 @@ func (m *App) ProcessRegion(cfg aws.Config) {
 				if v.State.Name != types.InstanceStateNameRunning {
 					continue
 				}
+				if v.InstanceLifecycle == types.InstanceLifecycleTypeSpot {
+					continue
+				}
+				isAutoScaling := false
+				for _, tag := range v.Tags {
+					if *tag.Key == "aws:autoscaling:groupName" && tag.Value != nil && *tag.Value != "" {
+						isAutoScaling = true
+					}
+				}
+				if isAutoScaling {
+					continue
+				}
 
 				preferences := preferences2.DefaultPreferences()
 				oi := OptimizationItem{
