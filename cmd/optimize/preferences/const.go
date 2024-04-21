@@ -1,5 +1,7 @@
 package preferences
 
+import "github.com/aws/aws-sdk-go-v2/aws"
+
 type PreferenceItem struct {
 	Key            string
 	MaxCharacters  int
@@ -7,6 +9,8 @@ type PreferenceItem struct {
 	Value          *string
 	PossibleValues []string
 	Pinned         bool
+	CanBePinned    bool
+	Unit           string
 }
 
 func DefaultPreferences() []PreferenceItem {
@@ -29,6 +33,9 @@ func DefaultPreferences() []PreferenceItem {
 		{Key: "Threads", MaxCharacters: 30, IsNumber: true, Value: nil, Pinned: false},
 		{Key: "vCPU", MaxCharacters: 30, IsNumber: true, Value: nil, Pinned: false},
 		{Key: "MemoryGB", MaxCharacters: 30, IsNumber: true, Value: nil, Pinned: true},
+		{Key: "CPUBreathingRoom", MaxCharacters: 30, IsNumber: true, Value: aws.String("10"), CanBePinned: false, Pinned: false, Unit: "%"},
+		{Key: "MemoryBreathingRoom", MaxCharacters: 30, IsNumber: true, Value: aws.String("10"), CanBePinned: false, Pinned: false, Unit: "%"},
+		{Key: "NetworkBreathingRoom", MaxCharacters: 30, IsNumber: true, Value: aws.String("10"), CanBePinned: false, Pinned: false, Unit: "%"},
 	}
 }
 

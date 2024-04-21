@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	preferences2 "github.com/kaytu-io/pennywise/cmd/optimize/preferences"
+	"github.com/kaytu-io/pennywise/pkg/api/wastage"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -17,24 +18,12 @@ var baseStyle = lipgloss.NewStyle().
 
 type OptimizationItem struct {
 	Instance            types.Instance
+	Volumes             []types.Volume
 	Region              string
 	OptimizationLoading bool
-	TargetInstanceType  string
-	TotalSaving         float64
-	CurrentCost         float64
-	TargetCost          float64
 
-	AvgCPUUsage string
-	TargetCores string
-
-	AvgNetworkBandwidth       string
-	TargetNetworkPerformance  string
-	CurrentNetworkPerformance string
-
-	CurrentMemory string
-	TargetMemory  string
-
-	Preferences []preferences2.PreferenceItem
+	Preferences               []preferences2.PreferenceItem
+	RightSizingRecommendation wastage.RightSizingRecommendation
 }
 
 type Ec2InstanceOptimizations struct {
@@ -42,12 +31,18 @@ type Ec2InstanceOptimizations struct {
 
 	table table.Model
 	items []OptimizationItem
+	help  HelpView
 
 	detailsPage *Ec2InstanceDetail
 	prefConf    *PreferencesConfiguration
 
 	clearScreen  bool
 	instanceChan chan OptimizationItem
+
+	Width  int
+	height int
+
+	tableHeight int
 }
 
 func NewEC2InstanceOptimizations(instanceChan chan OptimizationItem) *Ec2InstanceOptimizations {
@@ -79,9 +74,18 @@ func NewEC2InstanceOptimizations(instanceChan chan OptimizationItem) *Ec2Instanc
 	t.SetStyles(s)
 
 	return &Ec2InstanceOptimizations{
-		itemsChan:    make(chan OptimizationItem, 1000),
-		table:        t,
-		items:        nil,
+		itemsChan: make(chan OptimizationItem, 1000),
+		table:     t,
+		items:     nil,
+		help: HelpView{
+			lines: []string{
+				"↑/↓: move",
+				"enter: see details",
+				"p: change preferences for one item",
+				"P: change preferences for all items",
+				"q/ctrl+c: exit",
+			},
+		},
 		instanceChan: instanceChan,
 	}
 }
@@ -100,6 +104,9 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd, initCmd tea.Cmd
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.UpdateResponsive()
+
 	case tickMsg:
 		for {
 			nothingToAdd := false
@@ -119,13 +126,17 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				var rows []table.Row
 				for _, i := range m.items {
+					platform := ""
+					if i.Instance.PlatformDetails != nil {
+						platform = *i.Instance.PlatformDetails
+					}
 					row := table.Row{
 						*i.Instance.InstanceId,
 						string(i.Instance.InstanceType),
 						i.Region,
-						*i.Instance.PlatformDetails,
-						i.TargetInstanceType,
-						fmt.Sprintf("$%v", i.TotalSaving),
+						platform,
+						i.RightSizingRecommendation.TargetInstanceType,
+						fmt.Sprintf("$%.2f", i.RightSizingRecommendation.Saving),
 					}
 					if i.OptimizationLoading {
 						row[4] = "..."
@@ -161,11 +172,13 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.clearScreen = true
 						// re-evaluate
 						m.instanceChan <- i
+						m.UpdateResponsive()
 					})
 					initCmd = m.prefConf.Init()
 					break
 				}
 			}
+			m.UpdateResponsive()
 		case "P":
 			if len(m.table.SelectedRow()) == 0 {
 				break
@@ -180,8 +193,10 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.prefConf = nil
 				m.clearScreen = true
+				m.UpdateResponsive()
 			})
 			initCmd = m.prefConf.Init()
+			m.UpdateResponsive()
 		case "enter":
 			if len(m.table.SelectedRow()) == 0 {
 				break
@@ -192,10 +207,13 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if selectedInstanceID == *i.Instance.InstanceId {
 					m.detailsPage = NewEc2InstanceDetail(i, func() {
 						m.detailsPage = nil
+						m.UpdateResponsive()
 					})
 					initCmd = m.detailsPage.Init()
+					break
 				}
 			}
+			m.UpdateResponsive()
 		}
 	}
 
@@ -218,14 +236,95 @@ func (m *Ec2InstanceOptimizations) View() string {
 	if m.prefConf != nil {
 		return m.prefConf.View()
 	}
-	return baseStyle.Render(m.table.View()) + "\n\n" +
-		"  ↑/↓: move\n" +
-		"  enter: see details\n" +
-		"  p: change preferences for one item\n" +
-		"  P: change preferences for all items\n" +
-		"  q/ctrl+c: exit\n"
+	return baseStyle.Render(m.table.View()) + "\n" +
+		m.help.String()
 }
 
 func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {
 	m.itemsChan <- item
+}
+
+func (m *Ec2InstanceOptimizations) UpdateResponsive() {
+	defer func() {
+		m.table.SetHeight(m.tableHeight - 4)
+		if m.prefConf != nil {
+			m.prefConf.SetHeight(m.tableHeight)
+		}
+		if m.detailsPage != nil {
+			m.detailsPage.SetHeight(m.tableHeight)
+		}
+	}()
+
+	if m.prefConf != nil || m.detailsPage != nil {
+		m.tableHeight = m.height
+		return
+	}
+
+	m.tableHeight = 5
+	m.help.SetHeight(m.help.MinHeight())
+
+	checkResponsive := func() bool {
+		return m.height >= m.help.height+m.tableHeight && m.help.IsResponsive() && m.tableHeight >= 5
+	}
+
+	if !checkResponsive() {
+		return // nothing to do
+	}
+
+	for m.tableHeight < 9 {
+		m.tableHeight++
+		if !checkResponsive() {
+			m.tableHeight--
+			return
+		}
+	}
+
+	for m.help.height < m.help.MaxHeight() {
+		m.help.SetHeight(m.help.height + 1)
+		if !checkResponsive() {
+			m.help.SetHeight(m.help.height - 1)
+			return
+		}
+	}
+
+	for m.tableHeight < 30 {
+		m.tableHeight++
+		if !checkResponsive() {
+			m.tableHeight--
+			return
+		}
+	}
+}
+
+func (m *Ec2InstanceOptimizations) SetHeight(height int) {
+	m.height = height
+	m.UpdateResponsive()
+}
+
+func (m *Ec2InstanceOptimizations) MinHeight() int {
+	if m.prefConf != nil {
+		return m.prefConf.MinHeight()
+	}
+	if m.detailsPage != nil {
+		return m.detailsPage.MinHeight()
+	}
+	return m.help.MinHeight() + 5
+}
+
+func (m *Ec2InstanceOptimizations) PreferredMinHeight() int {
+	return 10
+}
+
+func (m *Ec2InstanceOptimizations) MaxHeight() int {
+	return m.help.MaxHeight() + 30
+}
+
+func (m *Ec2InstanceOptimizations) IsResponsive() bool {
+	if m.prefConf != nil && !m.prefConf.IsResponsive() {
+		return false
+	}
+	if m.detailsPage != nil && !m.detailsPage.IsResponsive() {
+		return false
+	}
+	return m.height >= m.MinHeight()
 }

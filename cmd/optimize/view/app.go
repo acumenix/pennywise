@@ -8,40 +8,59 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	preferences2 "github.com/kaytu-io/pennywise/cmd/optimize/preferences"
 	"github.com/kaytu-io/pennywise/pkg/api/wastage"
-	"github.com/kaytu-io/pennywise/pkg/server"
+	"github.com/kaytu-io/pennywise/pkg/hash"
+	"github.com/muesli/reflow/wordwrap"
 	"golang.org/x/net/context"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
-type App struct {
-	status              string
-	statusErr           string
-	errorChan           chan error
-	statusChan          chan string
-	processInstanceChan chan OptimizationItem
-
-	optimizationsTable *Ec2InstanceOptimizations
-
-	counter      int64
-	counterMutex sync.RWMutex
+type Job struct {
+	ID             string
+	Descrption     string
+	FailureMessage string
+	Done           bool
 }
 
-func NewApp(cfg aws.Config) *App {
+type App struct {
+	statusErr           string
+	errorChan           chan error
+	processInstanceChan chan OptimizationItem
+
+	jobChan     chan Job
+	runningJobs map[string]string
+	failedJobs  map[string]string
+
+	optimizationsTable *Ec2InstanceOptimizations
+	jobs               JobsView
+
+	width  int
+	height int
+}
+
+var (
+	helpStyle  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"})
+	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+)
+
+func NewApp(cfg aws.Config, accountHash string, idHash string, arnHash string) *App {
 	pi := make(chan OptimizationItem, 1000)
 	r := &App{
-		status:              "",
 		errorChan:           make(chan error, 1000),
-		statusChan:          make(chan string, 1000),
+		jobChan:             make(chan Job, 10000),
+		runningJobs:         map[string]string{},
+		failedJobs:          map[string]string{},
 		processInstanceChan: pi,
 		optimizationsTable:  NewEC2InstanceOptimizations(pi),
 	}
 	go r.UpdateStatus()
+	go r.ProcessInstances(cfg, accountHash, idHash, arnHash)
 	go r.ProcessAllRegions(cfg)
-	go r.ProcessInstances(cfg)
 	return r
 }
 
@@ -53,6 +72,10 @@ func (m *App) Init() tea.Cmd {
 
 func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.UpdateResponsive()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -60,76 +83,140 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	m.jobs.runningJobs, m.jobs.moreRunningJobs = m.RunningJobs()
+	m.jobs.failedJobs, m.jobs.moreFailedJobs = m.FailedJobs()
+
 	_, optTableCmd := m.optimizationsTable.Update(msg)
 	return m, tea.Batch(optTableCmd)
 }
 
+func (m *App) RunningJobs() ([]string, bool) {
+	if len(m.runningJobs) == 0 {
+		return nil, false
+	}
+	var res []string
+	for _, v := range m.runningJobs {
+		res = append(res, v)
+	}
+	sort.Strings(res)
+	count := 3
+	if len(res) < 3 {
+		count = len(res)
+	}
+	return res[:count], len(m.runningJobs) > 3
+}
+
+func (m *App) FailedJobs() ([]string, bool) {
+	if len(m.failedJobs) == 0 {
+		return nil, false
+	}
+	var res []string
+	for _, v := range m.failedJobs {
+		res = append(res, v)
+	}
+	sort.Strings(res)
+	count := 3
+	if len(res) < 3 {
+		count = len(res)
+	}
+	return res[:count], len(m.failedJobs) > 3
+}
+
 func (m *App) View() string {
+	if !m.checkResponsive() {
+		return "Application cannot be rendered in this screen size, please increase height of your terminal"
+	}
 	sb := strings.Builder{}
 	sb.WriteString(m.optimizationsTable.View())
-	sb.WriteString("\n  status: " + m.status + "\n")
+	//sb.WriteString("\n")
+
+	sb.WriteString(m.jobs.String())
+
 	if len(m.statusErr) > 0 {
-		sb.WriteString("  error: " + m.statusErr + "\n")
+		sb.WriteString(errorStyle.Render(wordwrap.String("  error: "+m.statusErr, m.width)) + "\n")
 	}
-	sb.WriteString("\n\n")
 	return sb.String()
 }
 
 func (m *App) UpdateStatus() {
 	for {
 		select {
+		case job := <-m.jobChan:
+			if !job.Done {
+				m.runningJobs[job.ID] = job.Descrption
+			} else {
+				if _, ok := m.runningJobs[job.ID]; ok {
+					delete(m.runningJobs, job.ID)
+				}
+			}
+			if len(job.FailureMessage) > 0 {
+				m.failedJobs[job.ID] = fmt.Sprintf("%s failed due to %s", job.Descrption, job.FailureMessage)
+			}
+
 		case err := <-m.errorChan:
 			m.statusErr = fmt.Sprintf("Failed due to %v", err)
-		case newStatus := <-m.statusChan:
-			m.status = newStatus
 		}
 	}
 }
 
-func (m *App) ProcessInstances(awsCfg aws.Config) {
-	config, err := server.GetConfig()
-	if err != nil {
-		m.errorChan <- err
-		return
-	}
-
+func (m *App) ProcessInstances(awsCfg aws.Config, accountHash, idHash, arnHash string) {
 	for item := range m.processInstanceChan {
 		awsCfg.Region = item.Region
 		localAWSCfg := awsCfg
 		localItem := item
-		m.counterMutex.Lock()
-		m.counter++
-		localCounter := m.counter
-		m.counterMutex.Unlock()
-		m.statusChan <- fmt.Sprintf("calculating possible optimizations for %d instances.", localCounter)
 
-		go func() {
-			m.ProcessInstance(config, localAWSCfg, localItem)
-			m.counterMutex.Lock()
-			defer m.counterMutex.Unlock()
-			m.counter--
-			m.statusChan <- fmt.Sprintf("calculating possible optimizations for %d instances.", m.counter)
-		}()
+		go m.ProcessInstance(localAWSCfg, localItem, accountHash, idHash, arnHash)
 	}
 }
 
-func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, item OptimizationItem) {
+func (m *App) ProcessInstance(awsConf aws.Config, item OptimizationItem, accountHash, idHash, arnHash string) {
 	defer func() {
 		if r := recover(); r != nil {
 			m.errorChan <- fmt.Errorf("%v", r)
 		}
 	}()
 
-	req, err := getEc2InstanceRequestData(context.Background(), awsConf, item.Instance, preferences2.Export(item.Preferences))
+	client := ec2.NewFromConfig(awsConf)
+	var volumeIds []string
+	for _, bd := range item.Instance.BlockDeviceMappings {
+		if bd.Ebs == nil {
+			continue
+		}
+		volumeIds = append(volumeIds, *bd.Ebs.VolumeId)
+	}
+
+	job := Job{ID: fmt.Sprintf("volumes_%s", *item.Instance.InstanceId), Descrption: fmt.Sprintf("getting volumes of %s", *item.Instance.InstanceId)}
+	m.jobChan <- job
+	job.Done = true
+
+	volumesResp, err := client.DescribeVolumes(context.Background(), &ec2.DescribeVolumesInput{
+		VolumeIds: volumeIds,
+	})
+	if err != nil {
+		job.FailureMessage = err.Error()
+		m.jobChan <- job
+		return
+	}
+	m.jobChan <- job
+
+	req, err := m.getEc2InstanceRequestData(context.Background(), awsConf, item.Instance, volumesResp.Volumes, preferences2.Export(item.Preferences), accountHash, idHash, arnHash)
 	if err != nil {
 		m.errorChan <- err
 		return
 	}
-	res, err := wastage.Ec2InstanceWastageRequest(*req, config.AccessToken)
+
+	job = Job{ID: fmt.Sprintf("wastage_%s", *item.Instance.InstanceId), Descrption: fmt.Sprintf("getting wastage of %s", *item.Instance.InstanceId)}
+	m.jobChan <- job
+	job.Done = true
+
+	res, err := wastage.Ec2InstanceWastageRequest(*req)
 	if err != nil {
-		m.errorChan <- err
+		job.FailureMessage = err.Error()
+		m.jobChan <- job
 		return
 	}
+	m.jobChan <- job
+
 	if res.RightSizing == nil {
 		item.OptimizationLoading = false
 		m.optimizationsTable.SendItem(item)
@@ -138,19 +225,10 @@ func (m *App) ProcessInstance(config *server.Config, awsConf aws.Config, item Op
 
 	m.optimizationsTable.SendItem(OptimizationItem{
 		Instance:                  item.Instance,
+		Volumes:                   volumesResp.Volumes,
 		Region:                    awsConf.Region,
 		OptimizationLoading:       false,
-		TargetInstanceType:        res.RightSizing.TargetInstanceType,
-		TotalSaving:               res.RightSizing.Saving,
-		CurrentCost:               res.RightSizing.CurrentCost,
-		TargetCost:                res.RightSizing.TargetCost,
-		AvgCPUUsage:               res.RightSizing.AvgCPUUsage,
-		TargetCores:               res.RightSizing.TargetCores,
-		AvgNetworkBandwidth:       res.RightSizing.AvgNetworkBandwidth,
-		TargetNetworkPerformance:  res.RightSizing.TargetNetworkPerformance,
-		CurrentNetworkPerformance: res.RightSizing.CurrentNetworkPerformance,
-		CurrentMemory:             res.RightSizing.CurrentMemory,
-		TargetMemory:              res.RightSizing.TargetMemory,
+		RightSizingRecommendation: *res.RightSizing,
 		Preferences:               item.Preferences,
 	})
 }
@@ -163,11 +241,19 @@ func (m *App) ProcessRegion(cfg aws.Config) {
 		}
 	}()
 	client := ec2.NewFromConfig(cfg)
+
+	job := Job{ID: fmt.Sprintf("region_ec2_instances_%s", cfg.Region), Descrption: "Listing all ec2 instances in " + cfg.Region}
+	m.jobChan <- job
+	job.Done = true
+	defer func() {
+		m.jobChan <- job
+	}()
+
 	paginator := ec2.NewDescribeInstancesPaginator(client, &ec2.DescribeInstancesInput{})
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			m.errorChan <- err
+			job.FailureMessage = err.Error()
 			return
 		}
 
@@ -194,8 +280,6 @@ func (m *App) ProcessRegion(cfg aws.Config) {
 					Instance:            v,
 					Region:              cfg.Region,
 					OptimizationLoading: true,
-					TargetInstanceType:  "",
-					TotalSaving:         0,
 					Preferences:         preferences,
 				}
 				m.optimizationsTable.SendItem(oi)
@@ -206,28 +290,28 @@ func (m *App) ProcessRegion(cfg aws.Config) {
 }
 
 func (m *App) ProcessAllRegions(cfg aws.Config) {
-	m.statusChan <- "Retrieving data from AWS"
 	defer func() {
 		if r := recover(); r != nil {
 			m.errorChan <- fmt.Errorf("%v", r)
 			return
 		}
-
-		m.statusChan <- "Successfully fetched all ec2 instances from AWS. Calculating instance optimizations..."
 	}()
-
-	m.statusChan <- "Listing all available regions"
 	regionClient := ec2.NewFromConfig(cfg)
+
+	job := Job{ID: "list_all_regions", Descrption: "Listing all available regions"}
+	m.jobChan <- job
+	job.Done = true
 	regions, err := regionClient.DescribeRegions(context.Background(), &ec2.DescribeRegionsInput{AllRegions: aws.Bool(false)})
 	if err != nil {
-		m.errorChan <- err
+		job.FailureMessage = err.Error()
+		m.jobChan <- job
 		return
 	}
+	m.jobChan <- job
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(regions.Regions))
 
-	m.statusChan <- "Fetching all EC2 Instances"
 	for _, region := range regions.Regions {
 		localCfg := cfg
 		localCfg.Region = *region.RegionName
@@ -240,25 +324,27 @@ func (m *App) ProcessAllRegions(cfg aws.Config) {
 	wg.Wait()
 }
 
-func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance types.Instance, preferences map[string]*string) (*wastage.EC2InstanceWastageRequest, error) {
-	client := ec2.NewFromConfig(cfg)
-
-	var volumeIds []string
-	for _, bd := range instance.BlockDeviceMappings {
-		if bd.Ebs == nil {
-			continue
-		}
-		volumeIds = append(volumeIds, *bd.Ebs.VolumeId)
-	}
-
-	res, err := client.DescribeVolumes(ctx, &ec2.DescribeVolumesInput{
-		VolumeIds: volumeIds,
-	})
-	if err != nil {
-		return nil, err
-	}
-
+func (m *App) getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance types.Instance, volumes []types.Volume, preferences map[string]*string, accountHash, idHash, arnHash string) (*wastage.EC2InstanceWastageRequest, error) {
 	cloudwatchClient := cloudwatch.NewFromConfig(cfg)
+	startTime := time.Now().Add(-24 * 7 * time.Hour)
+	endTime := time.Now()
+	statistics := []types2.Statistic{
+		types2.StatisticAverage,
+		types2.StatisticMinimum,
+		types2.StatisticMaximum,
+	}
+	dimensionFilter := []types2.Dimension{
+		{
+			Name:  aws.String("InstanceId"),
+			Value: instance.InstanceId,
+		},
+	}
+	metrics := map[string][]types2.Datapoint{}
+
+	job := Job{ID: fmt.Sprintf("metrics_%s", *instance.InstanceId), Descrption: fmt.Sprintf("getting metrics of %s", *instance.InstanceId)}
+	m.jobChan <- job
+	job.Done = true
+
 	paginator := cloudwatch.NewListMetricsPaginator(cloudwatchClient, &cloudwatch.ListMetricsInput{
 		Namespace: aws.String("AWS/EC2"),
 		Dimensions: []types2.DimensionFilter{
@@ -268,13 +354,11 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 			},
 		},
 	})
-	startTime := time.Now().Add(-24 * 7 * time.Hour)
-	endTime := time.Now()
-
-	metrics := map[string][]types2.Datapoint{}
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
+			job.FailureMessage = err.Error()
+			m.jobChan <- job
 			return nil, err
 		}
 
@@ -284,22 +368,12 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 				*p.MetricName != "NetworkOut") {
 				continue
 			}
-			statistics := []types2.Statistic{
-				types2.StatisticAverage,
-				types2.StatisticMinimum,
-				types2.StatisticMaximum,
-			}
 
 			// Create input for GetMetricStatistics
 			input := &cloudwatch.GetMetricStatisticsInput{
 				Namespace:  aws.String("AWS/EC2"),
 				MetricName: p.MetricName,
-				Dimensions: []types2.Dimension{
-					{
-						Name:  aws.String("InstanceId"),
-						Value: instance.InstanceId,
-					},
-				},
+				Dimensions: dimensionFilter,
 				StartTime:  aws.Time(startTime),
 				EndTime:    aws.Time(endTime),
 				Period:     aws.Int32(60 * 60), // 1 hour intervals
@@ -309,17 +383,222 @@ func getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, instance typ
 			// Get metric data
 			resp, err := cloudwatchClient.GetMetricStatistics(ctx, input)
 			if err != nil {
+				job.FailureMessage = err.Error()
+				m.jobChan <- job
 				return nil, err
 			}
 
 			metrics[*p.MetricName] = resp.Datapoints
 		}
 	}
+	m.jobChan <- job
+
+	job = Job{ID: fmt.Sprintf("metrics_cw_%s", *instance.InstanceId), Descrption: fmt.Sprintf("getting cloud watch agent metrics of %s", *instance.InstanceId)}
+	m.jobChan <- job
+	job.Done = true
+
+	paginator = cloudwatch.NewListMetricsPaginator(cloudwatchClient, &cloudwatch.ListMetricsInput{
+		Namespace: aws.String("CWAgent"),
+		Dimensions: []types2.DimensionFilter{
+			{
+				Name:  aws.String("InstanceId"),
+				Value: instance.InstanceId,
+			},
+		},
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			job.FailureMessage = err.Error()
+			m.jobChan <- job
+			return nil, err
+		}
+
+		for _, p := range page.Metrics {
+			if p.MetricName == nil || (*p.MetricName != "mem_used_percent") {
+				continue
+			}
+
+			// Create input for GetMetricStatistics
+			input := &cloudwatch.GetMetricStatisticsInput{
+				Namespace:  aws.String("CWAgent"),
+				MetricName: p.MetricName,
+				Dimensions: dimensionFilter,
+				StartTime:  aws.Time(startTime),
+				EndTime:    aws.Time(endTime),
+				Period:     aws.Int32(60 * 60), // 1 hour intervals
+				Statistics: statistics,
+			}
+
+			// Get metric data
+			resp, err := cloudwatchClient.GetMetricStatistics(ctx, input)
+			if err != nil {
+				job.FailureMessage = err.Error()
+				m.jobChan <- job
+				return nil, err
+			}
+
+			metrics[*p.MetricName] = resp.Datapoints
+		}
+	}
+	m.jobChan <- job
+
+	var monitoring *types.MonitoringState
+	if instance.Monitoring != nil {
+		monitoring = &instance.Monitoring.State
+	}
+	var placement *wastage.EC2Placement
+	if instance.Placement != nil {
+		placement = &wastage.EC2Placement{
+			Tenancy: instance.Placement.Tenancy,
+		}
+		if instance.Placement.AvailabilityZone != nil {
+			placement.AvailabilityZone = *instance.Placement.AvailabilityZone
+		}
+		if instance.Placement.HostId != nil {
+			placement.HashedHostId = hash.HashString(*instance.Placement.HostId)
+		}
+	}
+
+	var kaytuVolumes []wastage.EC2Volume
+	volumeMetrics := map[string]map[string][]types2.Datapoint{}
+	for _, v := range volumes {
+		kaytuVolumes = append(kaytuVolumes, toEBSVolume(v))
+
+		job = Job{ID: fmt.Sprintf("metrics_volume_%s", *instance.InstanceId), Descrption: fmt.Sprintf("getting volume metrics of %s", *v.VolumeId)}
+		m.jobChan <- job
+		job.Done = true
+
+		paginator := cloudwatch.NewListMetricsPaginator(cloudwatchClient, &cloudwatch.ListMetricsInput{
+			Namespace: aws.String("AWS/EBS"),
+			Dimensions: []types2.DimensionFilter{
+				{
+					Name:  aws.String("VolumeId"),
+					Value: v.VolumeId,
+				},
+			},
+		})
+		for paginator.HasMorePages() {
+			page, err := paginator.NextPage(ctx)
+			if err != nil {
+				job.FailureMessage = err.Error()
+				m.jobChan <- job
+				return nil, err
+			}
+
+			for _, p := range page.Metrics {
+				if p.MetricName == nil || (*p.MetricName != "VolumeReadOps" &&
+					*p.MetricName != "VolumeWriteOps" &&
+					*p.MetricName != "VolumeReadBytes" &&
+					*p.MetricName != "VolumeWriteBytes") {
+					continue
+				}
+
+				// Create input for GetMetricStatistics
+				input := &cloudwatch.GetMetricStatisticsInput{
+					Namespace:  aws.String("AWS/EBS"),
+					MetricName: p.MetricName,
+					Dimensions: []types2.Dimension{
+						{
+							Name:  aws.String("VolumeId"),
+							Value: v.VolumeId,
+						},
+					},
+					StartTime:  aws.Time(startTime),
+					EndTime:    aws.Time(endTime),
+					Period:     aws.Int32(60 * 60), // 1 hour intervals
+					Statistics: statistics,
+				}
+
+				// Get metric data
+				resp, err := cloudwatchClient.GetMetricStatistics(ctx, input)
+				if err != nil {
+					job.FailureMessage = err.Error()
+					m.jobChan <- job
+					return nil, err
+				}
+
+				if _, ok := volumeMetrics[hash.HashString(*v.VolumeId)]; !ok {
+					volumeMetrics[hash.HashString(*v.VolumeId)] = make(map[string][]types2.Datapoint)
+				}
+				volumeMetrics[hash.HashString(*v.VolumeId)][*p.MetricName] = resp.Datapoints
+			}
+		}
+
+		m.jobChan <- job
+	}
 	return &wastage.EC2InstanceWastageRequest{
-		Instance:    instance,
-		Volumes:     res.Volumes,
-		Metrics:     metrics,
-		Region:      cfg.Region,
-		Preferences: preferences,
+		HashedAccountID: accountHash,
+		HashedUserID:    idHash,
+		HashedARN:       arnHash,
+		Instance: wastage.EC2Instance{
+			HashedInstanceId:  hash.HashString(*instance.InstanceId),
+			State:             instance.State.Name,
+			InstanceType:      instance.InstanceType,
+			Platform:          instance.Platform,
+			ThreadsPerCore:    *instance.CpuOptions.ThreadsPerCore,
+			CoreCount:         *instance.CpuOptions.CoreCount,
+			EbsOptimized:      *instance.EbsOptimized,
+			InstanceLifecycle: instance.InstanceLifecycle,
+			Monitoring:        monitoring,
+			Placement:         placement,
+		},
+		Volumes:       kaytuVolumes,
+		Metrics:       metrics,
+		VolumeMetrics: volumeMetrics,
+		Region:        cfg.Region,
+		Preferences:   preferences,
 	}, nil
+}
+
+func (m *App) checkResponsive() bool {
+	return m.height >= m.jobs.height+m.optimizationsTable.height && m.jobs.IsResponsive() && m.optimizationsTable.IsResponsive()
+}
+
+func (m *App) UpdateResponsive() {
+	m.optimizationsTable.SetHeight(m.optimizationsTable.MinHeight())
+	m.jobs.SetHeight(m.jobs.MinHeight())
+	defer func() {
+		i := m.jobs.height + m.optimizationsTable.height
+		i++
+	}()
+
+	if !m.checkResponsive() {
+		return // nothing to do
+	}
+
+	for m.optimizationsTable.height < m.optimizationsTable.PreferredMinHeight() {
+		m.optimizationsTable.SetHeight(m.optimizationsTable.height + 1)
+		if !m.checkResponsive() {
+			m.optimizationsTable.SetHeight(m.optimizationsTable.height - 1)
+			return
+		}
+	}
+
+	for m.jobs.height < m.jobs.MaxHeight() {
+		m.jobs.SetHeight(m.jobs.height + 1)
+		if !m.checkResponsive() {
+			m.jobs.SetHeight(m.jobs.height - 1)
+			return
+		}
+	}
+
+	for m.optimizationsTable.height < m.optimizationsTable.MaxHeight() {
+		m.optimizationsTable.SetHeight(m.optimizationsTable.height + 1)
+		if !m.checkResponsive() {
+			m.optimizationsTable.SetHeight(m.optimizationsTable.height - 1)
+			return
+		}
+	}
+}
+
+func toEBSVolume(v types.Volume) wastage.EC2Volume {
+	return wastage.EC2Volume{
+		HashedVolumeId:   hash.HashString(*v.VolumeId),
+		VolumeType:       v.VolumeType,
+		Size:             v.Size,
+		Iops:             v.Iops,
+		AvailabilityZone: v.AvailabilityZone,
+		Throughput:       v.Throughput,
+	}
 }
