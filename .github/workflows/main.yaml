@@ -88,7 +88,8 @@ jobs:
           echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode > cert.crt
           echo "${{ fromJson(steps.download_release.outputs.downloaded_files)[0] }}" > pennywise_1.8.3_windows_386.exe
           osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_1.8.8_windows_386.exe -out pennywise_1.8.8_windows_386_signed.exe
-          export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/OWNER/REPO/releases/latest" | jq -r .upload_url)
+          export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/kaytu-io/pennywise/releases/latest" | jq -r .upload_url)
+          echo $UPLOAD_URL
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
       - name: Upload Release Asset
         id: upload-release-asset
