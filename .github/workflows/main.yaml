@@ -126,7 +126,24 @@ jobs:
           zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
           export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/kaytu-io/pennywise/releases/latest" | jq -r .upload_url)
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
-          ls
+          release_id=$(curl --request GET \
+            --url https://api.github.com/repos/kaytu-io/pennywise/releases/latest \
+            --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}' | jq '.id')
+          assets=$(curl --request GET \
+            --url https://api.github.com/repos/kaytu-io/pennywise/releases/$release_id/assets \
+            --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}')
+          windows386=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe") | .id')
+          arm64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_arm64.exe") | .id')
+          amd64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_amd64.exe") | .id')
+          curl --request DELETE \
+            --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$windows386 \
+            --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          curl --request DELETE \
+                      --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$arm64 \
+                      --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          curl --request DELETE \
+                      --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$amd64 \
+                      --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
       - name: Upload Release Asset 386
         id: upload-release-asset-386
         uses: actions/upload-release-asset@v1
@@ -135,7 +152,7 @@ jobs:
         with:
           upload_url: ${{ steps.sign_executable.outputs.upload_url }}
           asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.exe
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.exe
+          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe
           asset_content_type: application/octet-stream
       - name: Upload Release Asset 386 zip
         id: upload-release-asset-386-zip
@@ -145,7 +162,7 @@ jobs:
         with:
           upload_url: ${{ steps.sign_executable.outputs.upload_url }}
           asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.zip
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.zip
+          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.zip
           asset_content_type: application/zip
       - name: Upload Release Asset arm64
         id: upload-release-asset-arm64
@@ -155,7 +172,7 @@ jobs:
         with:
           upload_url: ${{ steps.sign_executable.outputs.upload_url }}
           asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.exe
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.exe
+          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe
           asset_content_type: application/octet-stream
       - name: Upload Release Asset arm64 zip
         id: upload-release-asset-arm64-zip
@@ -165,7 +182,7 @@ jobs:
         with:
           upload_url: ${{ steps.sign_executable.outputs.upload_url }}
           asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.zip
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.zip
+          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.zip
           asset_content_type: application/zip
       - name: Upload Release Asset
         id: upload-release-asset-amd64
@@ -175,7 +192,7 @@ jobs:
         with:
           upload_url: ${{ steps.sign_executable.outputs.upload_url }}
           asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
+          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe
           asset_content_type: application/octet-stream
       - name: Upload Release Asset amd64 zip
         id: upload-release-asset-amd64-zip
@@ -185,5 +202,5 @@ jobs:
         with:
           upload_url: ${{ steps.sign_executable.outputs.upload_url }}
           asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip
+          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.zip
           asset_content_type: application/zip
