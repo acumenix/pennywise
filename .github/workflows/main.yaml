@@ -135,22 +135,29 @@ jobs:
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}')
           echo $assets
           windows386=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe") | .id')
-          arm64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_arm64.exe") | .id')
-          amd64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_amd64.exe") | .id')
-          amd64url=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_amd64.exe") | .url')
-          echo $windows386
-          echo $arm64
-          echo $amd64
-          echo $amd64url
+          arm64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe") | .id')
+          amd64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe") | .id')
+          windows386zip=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.zip") | .id')
+          arm64zip=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.zip") | .id')
+          amd64zip=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.zip") | .id')
           curl --request DELETE \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$windows386 \
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
           curl --request DELETE \
-                      --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$arm64 \
-                      --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+            --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$arm64 \
+            --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
           curl --request DELETE \
-                      --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$amd64 \
-                      --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+            --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$amd64 \
+            --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          curl --request DELETE \
+            --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$windows386zip \
+            --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          curl --request DELETE \
+            --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$arm64zip \
+            --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          curl --request DELETE \
+            --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$amd64zip \
+            --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
       - name: Upload Release Asset 386
         id: upload-release-asset-386
         uses: actions/upload-release-asset@v1
