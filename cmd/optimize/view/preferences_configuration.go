@@ -30,6 +30,8 @@ type PreferencesConfiguration struct {
 	focused    int
 	valueFocus int
 	err        error
+	height     int
+	help       HelpView
 
 	pref  []preferences2.PreferenceItem
 	close func([]preferences2.PreferenceItem)
@@ -63,6 +65,17 @@ func NewPreferencesConfiguration(preferences []preferences2.PreferenceItem, clos
 		inputs: inputs,
 		pref:   preferences,
 		close:  close,
+		help: HelpView{
+			lines: []string{
+				"↑/↓: move",
+				"enter: next field",
+				"←/→: prev/next value (for fields with specific values)",
+				"esc: apply and exit",
+				"tab: pin/unpin value to current ec2 instance",
+				"ctrl+c: exit",
+			},
+			height: 8,
+		},
 	}
 }
 
@@ -183,14 +196,7 @@ func (m *PreferencesConfiguration) View() string {
 		builder.WriteString(m.inputs[idx].View())
 		builder.WriteString("\n")
 	}
-	builder.WriteString(helpStyle.Render(`
-↑/↓: move
-enter: next field
-←/→: prev/next value (for fields with specific values)
-esc: apply and exit
-tab: pin/unpin value to current ec2 instance
-ctrl+c: exit
-`))
+	builder.WriteString(m.help.String())
 	return builder.String()
 }
 
@@ -222,4 +228,16 @@ func (m *PreferencesConfiguration) prevInput() {
 	if m.focused < 0 {
 		m.focused = len(m.inputs) - 1
 	}
+}
+
+func (m *PreferencesConfiguration) IsResponsive() bool {
+	return m.height >= 30
+}
+
+func (m *PreferencesConfiguration) SetHeight(height int) {
+	m.height = height
+}
+
+func (m *PreferencesConfiguration) MinHeight() int {
+	return 30
 }

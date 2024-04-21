@@ -17,6 +17,7 @@ type Ec2InstanceDetail struct {
 	width            int
 	height           int
 	selectedDevice   string
+	help             HelpView
 }
 
 func ExtractProperties(item OptimizationItem) map[string][]table.Row {
@@ -173,13 +174,13 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		detailTable: table.New(
 			table.WithColumns(detailColumns),
 			table.WithFocused(false),
-			table.WithHeight(8),
+			table.WithHeight(1),
 		),
 		deviceTable: table.New(
 			table.WithColumns(deviceColumns),
 			table.WithRows(deviceRows),
 			table.WithFocused(true),
-			table.WithHeight(12),
+			table.WithHeight(len(deviceRows)),
 		),
 	}
 
@@ -205,6 +206,14 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 	model.detailTable.SetStyles(detailStyle)
 	model.deviceTable.SetStyles(deviceStyle)
 	model.deviceProperties = ExtractProperties(item)
+	model.help = HelpView{
+		lines: []string{
+			"↑/↓: move",
+			"esc: back to ec2 instance list",
+			"q/ctrl+c: exit",
+		},
+		height: 5,
+	}
 	return &model
 }
 
@@ -215,8 +224,6 @@ func (m *Ec2InstanceDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
-		m.height = msg.Height
-
 		m.deviceTable.SetWidth(m.width)
 		m.detailTable.SetWidth(m.width)
 	case tea.KeyMsg:
@@ -232,6 +239,8 @@ func (m *Ec2InstanceDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selectedDevice != m.deviceTable.SelectedRow()[0] {
 			m.selectedDevice = m.deviceTable.SelectedRow()[0]
 			m.detailTable.SetRows(m.deviceProperties[m.selectedDevice])
+			m.detailTable.SetHeight(len(m.deviceProperties[m.selectedDevice]))
+
 		}
 	}
 	//m.detailTable, detailCMD = m.detailTable.Update(msg)
@@ -240,10 +249,19 @@ func (m *Ec2InstanceDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Ec2InstanceDetail) View() string {
 	return baseStyle.Render(m.deviceTable.View()) + "\n" +
-		baseStyle.Render(m.detailTable.View()) +
-		helpStyle.Render(`
-↑/↓: move
-esc: back to ec2 instance list
-q/ctrl+c: exit
-`)
+		baseStyle.Render(m.detailTable.View()) + "\n" +
+		m.help.String()
+}
+
+func (m *Ec2InstanceDetail) IsResponsive() bool {
+	return m.height >= 30
+}
+
+func (m *Ec2InstanceDetail) SetHeight(height int) {
+	m.height = height
+}
+
+func (m *Ec2InstanceDetail) MinHeight() int {
+	return 30
+
 }

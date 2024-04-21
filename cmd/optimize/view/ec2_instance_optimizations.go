@@ -172,11 +172,13 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.clearScreen = true
 						// re-evaluate
 						m.instanceChan <- i
+						m.UpdateResponsive()
 					})
 					initCmd = m.prefConf.Init()
 					break
 				}
 			}
+			m.UpdateResponsive()
 		case "P":
 			if len(m.table.SelectedRow()) == 0 {
 				break
@@ -191,8 +193,10 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.prefConf = nil
 				m.clearScreen = true
+				m.UpdateResponsive()
 			})
 			initCmd = m.prefConf.Init()
+			m.UpdateResponsive()
 		case "enter":
 			if len(m.table.SelectedRow()) == 0 {
 				break
@@ -203,10 +207,13 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if selectedInstanceID == *i.Instance.InstanceId {
 					m.detailsPage = NewEc2InstanceDetail(i, func() {
 						m.detailsPage = nil
+						m.UpdateResponsive()
 					})
 					initCmd = m.detailsPage.Init()
+					break
 				}
 			}
+			m.UpdateResponsive()
 		}
 	}
 
@@ -240,7 +247,19 @@ func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {
 func (m *Ec2InstanceOptimizations) UpdateResponsive() {
 	defer func() {
 		m.table.SetHeight(m.tableHeight - 4)
+		if m.prefConf != nil {
+			m.prefConf.SetHeight(m.tableHeight)
+		}
+		if m.detailsPage != nil {
+			m.detailsPage.SetHeight(m.tableHeight)
+		}
 	}()
+
+	if m.prefConf != nil || m.detailsPage != nil {
+		m.tableHeight = m.height
+		return
+	}
+
 	m.tableHeight = 5
 	m.help.SetHeight(m.help.MinHeight())
 
@@ -279,9 +298,16 @@ func (m *Ec2InstanceOptimizations) UpdateResponsive() {
 
 func (m *Ec2InstanceOptimizations) SetHeight(height int) {
 	m.height = height
+	m.UpdateResponsive()
 }
 
 func (m *Ec2InstanceOptimizations) MinHeight() int {
+	if m.prefConf != nil {
+		return m.prefConf.MinHeight()
+	}
+	if m.detailsPage != nil {
+		return m.detailsPage.MinHeight()
+	}
 	return m.help.MinHeight() + 5
 }
 
@@ -294,5 +320,11 @@ func (m *Ec2InstanceOptimizations) MaxHeight() int {
 }
 
 func (m *Ec2InstanceOptimizations) IsResponsive() bool {
+	if m.prefConf != nil && !m.prefConf.IsResponsive() {
+		return false
+	}
+	if m.detailsPage != nil && !m.detailsPage.IsResponsive() {
+		return false
+	}
 	return m.height >= m.MinHeight()
 }
