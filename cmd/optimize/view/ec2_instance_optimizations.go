@@ -31,12 +31,18 @@ type Ec2InstanceOptimizations struct {
 
 	table table.Model
 	items []OptimizationItem
+	help  HelpView
 
 	detailsPage *Ec2InstanceDetail
 	prefConf    *PreferencesConfiguration
 
 	clearScreen  bool
 	instanceChan chan OptimizationItem
+
+	Width  int
+	height int
+
+	tableHeight int
 }
 
 func NewEC2InstanceOptimizations(instanceChan chan OptimizationItem) *Ec2InstanceOptimizations {
@@ -68,9 +74,18 @@ func NewEC2InstanceOptimizations(instanceChan chan OptimizationItem) *Ec2Instanc
 	t.SetStyles(s)
 
 	return &Ec2InstanceOptimizations{
-		itemsChan:    make(chan OptimizationItem, 1000),
-		table:        t,
-		items:        nil,
+		itemsChan: make(chan OptimizationItem, 1000),
+		table:     t,
+		items:     nil,
+		help: HelpView{
+			lines: []string{
+				"↑/↓: move",
+				"enter: see details",
+				"p: change preferences for one item",
+				"P: change preferences for all items",
+				"q/ctrl+c: exit",
+			},
+		},
 		instanceChan: instanceChan,
 	}
 }
@@ -89,6 +104,9 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd, initCmd tea.Cmd
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.UpdateResponsive()
+
 	case tickMsg:
 		for {
 			nothingToAdd := false
@@ -212,15 +230,69 @@ func (m *Ec2InstanceOptimizations) View() string {
 		return m.prefConf.View()
 	}
 	return baseStyle.Render(m.table.View()) +
-		helpStyle.Render(`
-↑/↓: move
-enter: see details
-p: change preferences for one item
-P: change preferences for all items
-q/ctrl+c: exit
-`)
+		m.help.String()
 }
 
 func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {
 	m.itemsChan <- item
+}
+
+func (m *Ec2InstanceOptimizations) UpdateResponsive() {
+	defer func() {
+		m.table.SetHeight(m.tableHeight - 4)
+	}()
+	m.tableHeight = 5
+	m.help.SetHeight(m.help.MinHeight())
+
+	checkResponsive := func() bool {
+		return m.height >= m.help.height+m.tableHeight && m.help.IsResponsive() && m.tableHeight >= 5
+	}
+
+	if !checkResponsive() {
+		return // nothing to do
+	}
+
+	for m.tableHeight < 9 {
+		m.tableHeight++
+		if !checkResponsive() {
+			m.tableHeight--
+			return
+		}
+	}
+
+	for m.help.height < m.help.MaxHeight() {
+		m.help.SetHeight(m.help.height + 1)
+		if !checkResponsive() {
+			m.help.SetHeight(m.help.height - 1)
+			return
+		}
+	}
+
+	for m.tableHeight < 30 {
+		m.tableHeight++
+		if !checkResponsive() {
+			m.tableHeight--
+			return
+		}
+	}
+}
+
+func (m *Ec2InstanceOptimizations) SetHeight(height int) {
+	m.height = height
+}
+
+func (m *Ec2InstanceOptimizations) MinHeight() int {
+	return m.help.MinHeight() + 5
+}
+
+func (m *Ec2InstanceOptimizations) PreferredMinHeight() int {
+	return 10
+}
+
+func (m *Ec2InstanceOptimizations) MaxHeight() int {
+	return m.help.MaxHeight() + 30
+}
+
+func (m *Ec2InstanceOptimizations) IsResponsive() bool {
+	return m.height >= m.MinHeight()
 }

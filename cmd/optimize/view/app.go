@@ -38,6 +38,7 @@ type App struct {
 	failedJobs  map[string]string
 
 	optimizationsTable *Ec2InstanceOptimizations
+	jobs               JobsView
 
 	width  int
 	height int
@@ -75,12 +76,16 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.UpdateResponsive()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
 		}
 	}
+
+	m.jobs.runningJobs, m.jobs.moreRunningJobs = m.RunningJobs()
+	m.jobs.failedJobs, m.jobs.moreFailedJobs = m.FailedJobs()
 
 	_, optTableCmd := m.optimizationsTable.Update(msg)
 	return m, tea.Batch(optTableCmd)
@@ -121,34 +126,13 @@ func (m *App) FailedJobs() ([]string, bool) {
 func (m *App) View() string {
 	sb := strings.Builder{}
 	sb.WriteString(m.optimizationsTable.View())
+	//sb.WriteString("\n")
 
-	runningJobs, moreRunningJobs := m.RunningJobs()
-	failedJobs, moreFailedJobs := m.FailedJobs()
-	if len(runningJobs) > 0 {
-		sb.WriteString("\n  Jobs:\n")
-		for _, v := range runningJobs {
-			sb.WriteString(wordwrap.String(fmt.Sprintf("    - %s", v), m.width))
-			sb.WriteString("\n")
-		}
-		if moreRunningJobs {
-			sb.WriteString("    ...\n")
-		}
-	}
-	if len(failedJobs) > 0 {
-		sb.WriteString("\n  Failed jobs:\n")
-		for _, v := range failedJobs {
-			sb.WriteString(errorStyle.Render(wordwrap.String(fmt.Sprintf("    - %s", v), m.width)))
-			sb.WriteString("\n")
-		}
-		if moreFailedJobs {
-			sb.WriteString(errorStyle.Render("    ...") + "\n")
-		}
-	}
+	sb.WriteString(m.jobs.String())
 
 	if len(m.statusErr) > 0 {
 		sb.WriteString(errorStyle.Render(wordwrap.String("  error: "+m.statusErr, m.width)) + "\n")
 	}
-	sb.WriteString("\n\n")
 	return sb.String()
 }
 
@@ -563,6 +547,47 @@ func (m *App) getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, ins
 		Region:        cfg.Region,
 		Preferences:   preferences,
 	}, nil
+}
+
+func (m *App) UpdateResponsive() {
+	m.optimizationsTable.SetHeight(m.optimizationsTable.MinHeight())
+	m.jobs.SetHeight(m.jobs.MinHeight())
+	defer func() {
+		i := m.jobs.height + m.optimizationsTable.height
+		i++
+	}()
+
+	checkResponsive := func() bool {
+		return m.height >= m.jobs.height+m.optimizationsTable.height && m.jobs.IsResponsive() && m.optimizationsTable.IsResponsive()
+	}
+
+	if !checkResponsive() {
+		return // nothing to do
+	}
+
+	for m.optimizationsTable.height < m.optimizationsTable.PreferredMinHeight() {
+		m.optimizationsTable.SetHeight(m.optimizationsTable.height + 1)
+		if !checkResponsive() {
+			m.optimizationsTable.SetHeight(m.optimizationsTable.height - 1)
+			return
+		}
+	}
+
+	for m.jobs.height < m.jobs.MaxHeight() {
+		m.jobs.SetHeight(m.jobs.height + 1)
+		if !checkResponsive() {
+			m.jobs.SetHeight(m.jobs.height - 1)
+			return
+		}
+	}
+
+	for m.optimizationsTable.height < m.optimizationsTable.MaxHeight() {
+		m.optimizationsTable.SetHeight(m.optimizationsTable.height + 1)
+		if !checkResponsive() {
+			m.optimizationsTable.SetHeight(m.optimizationsTable.height - 1)
+			return
+		}
+	}
 }
 
 func toEBSVolume(v types.Volume) wastage.EC2Volume {
