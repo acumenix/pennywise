@@ -6,68 +6,68 @@ on:
       - main
 
 jobs:
-#  tag:
-#    runs-on: ubuntu-latest
-#    outputs:
-#      latest_tag: ${{ steps.set_latest_tag.outputs.latest_tag }}
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#        with:
-#          fetch-depth: 0
-#          token: ${{ secrets.GH_TOKEN }}
-#      - name: Set up Go
-#        uses: actions/setup-go@v4
-#        with:
-#          go-version: stable
-#      - name: Tag version
-#        id: tag_version
-#        uses: mathieudutour/github-tag-action@v6.1
-#        with:
-#          github_token: ${{ secrets.GH_TOKEN }}
-#          release_branches: main
-#          tag_prefix: v
-#      - name: Set latest tag output
-#        id: set_latest_tag
-#        run: |
-#          if [[ -z "${{ steps.tag_version.outputs.new_tag }}" ]]; then
-#            echo "latest_tag=${{ steps.tag_version.outputs.previous_tag }}" >> "$GITHUB_OUTPUT"
-#          else
-#            echo "latest_tag=${{ steps.tag_version.outputs.new_tag }}" >> "$GITHUB_OUTPUT"
-#          fi
-#  release:
-#    runs-on: ubuntu-latest
-#    needs:
-#      - tag
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#        with:
-#          fetch-depth: 0
-#          token: ${{ secrets.GH_TOKEN }}
-#      - name: Set up Go
-#        uses: actions/setup-go@v4
-#        with:
-#          go-version: stable
-#      - name: Install cosign
-#        run: |
-#          curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
-#          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
-#          sudo chmod +x /usr/local/bin/cosign
-#      - name: Run GoReleaser
-#        uses: goreleaser/goreleaser-action@v5
-#        with:
-#          distribution: goreleaser
-#          version: latest
-#          args: release --clean
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-#          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
-#          COSIGN_SECRET: ${{ secrets.COSIGN_SECRET }}
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      latest_tag: ${{ steps.set_latest_tag.outputs.latest_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: stable
+      - name: Tag version
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GH_TOKEN }}
+          release_branches: main
+          tag_prefix: v
+      - name: Set latest tag output
+        id: set_latest_tag
+        run: |
+          if [[ -z "${{ steps.tag_version.outputs.new_tag }}" ]]; then
+            echo "latest_tag=${{ steps.tag_version.outputs.previous_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest_tag=${{ steps.tag_version.outputs.new_tag }}" >> "$GITHUB_OUTPUT"
+          fi
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - tag
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: stable
+      - name: Install cosign
+        run: |
+          curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
+          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
+          sudo chmod +x /usr/local/bin/cosign
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
+          COSIGN_SECRET: ${{ secrets.COSIGN_SECRET }}
   sign-windows:
     runs-on: ubuntu-latest
-#    needs:
-#      - release
+    needs:
+      - release
     steps:
       - uses: robinraju/release-downloader@v1.10
         id: download_release
@@ -87,9 +87,9 @@ jobs:
           echo "${{ secrets.SELFSIGNED_KEY }}" | base64 --decode > cert.key
           echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode > cert.crt
           echo "${{ fromJson(steps.download_release.outputs.downloaded_files)[0] }}" > pennywise_1.8.3_windows_386.exe
-          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_1.8.8_windows_386.exe -out pennywise_1.8.8_windows_386_signed.exe
+          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in "pennywise_${{ steps.tag_version.outputs.new_tag }}_windows_386.exe" -out "pennywise_${{ steps.tag_version.outputs.new_tag }}_windows_386_signed.exe"
           export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/kaytu-io/pennywise/releases/latest" | jq -r .upload_url)
-          echo $UPLOAD_URL
+          echo ${{ steps.tag_version.outputs.new_tag }}
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
       - name: Upload Release Asset
         id: upload-release-asset
@@ -98,6 +98,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_1.8.8_windows_386_signed.exe
-          asset_name: pennywise_1.8.8_windows_386_signed.exe
+          asset_path: ./pennywise_${{ steps.tag_version.outputs.new_tag }}_windows_386_signed.exe
+          asset_name: pennywise_${{ steps.tag_version.outputs.new_tag }}_windows_386_signed.exe
           asset_content_type: application/octet-stream
