@@ -15,6 +15,8 @@ import (
 var baseStyle = lipgloss.NewStyle().
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderForeground(lipgloss.Color("240"))
+var costStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+var savingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 
 type OptimizationItem struct {
 	Instance            types.Instance
@@ -135,6 +137,15 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						totalSaving += s
 					}
 
+					//name := ""
+					//for _, t := range i.Instance.Tags {
+					//	if t.Key != nil && strings.ToLower(*t.Key) == "name" && t.Value != nil {
+					//		name = *t.Value
+					//	}
+					//}
+					//if name != "" {
+					//	name = *i.Instance.InstanceId
+					//}
 					row := table.Row{
 						*i.Instance.InstanceId,
 						string(i.Instance.InstanceType),
@@ -143,7 +154,7 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						fmt.Sprintf("$%.2f", totalSaving),
 					}
 					if i.OptimizationLoading {
-						row[4] = "..."
+						row[4] = "loading"
 					}
 					rows = append(rows, row)
 				}
@@ -253,7 +264,8 @@ func (m *Ec2InstanceOptimizations) View() string {
 			savings += v
 		}
 	}
-	return fmt.Sprintf("Current runtime cost: $%.2f, Savings: $%.2f\n", totalCost, savings) +
+	return "Current runtime cost: " + costStyle.Render(fmt.Sprintf("$%.2f", totalCost)) +
+		", Savings: " + savingStyle.Render(fmt.Sprintf("$%.2f", savings)) + "\n" +
 		baseStyle.Render(m.table.View()) + "\n" +
 		m.help.String()
 }

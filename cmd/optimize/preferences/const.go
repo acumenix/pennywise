@@ -36,6 +36,7 @@ func DefaultPreferences() []PreferenceItem {
 		{Key: "CPUBreathingRoom", MaxCharacters: 30, IsNumber: true, Value: aws.String("10"), CanBePinned: false, Pinned: false, Unit: "%"},
 		{Key: "MemoryBreathingRoom", MaxCharacters: 30, IsNumber: true, Value: aws.String("10"), CanBePinned: false, Pinned: false, Unit: "%"},
 		{Key: "NetworkBreathingRoom", MaxCharacters: 30, IsNumber: true, Value: aws.String("10"), CanBePinned: false, Pinned: false, Unit: "%"},
+		{Key: "ObservabilityTimePeriod", MaxCharacters: 30, IsNumber: false, Value: aws.String("7"), CanBePinned: false, Pinned: false, Unit: "days", PossibleValues: []string{"7"}},
 	}
 }
 
