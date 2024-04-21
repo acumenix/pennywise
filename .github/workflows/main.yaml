@@ -35,6 +35,15 @@ jobs:
           else
             echo "latest_tag=${{ steps.tag_version.outputs.new_tag }}" >> "$GITHUB_OUTPUT"
           fi
+      - name: Save new tag
+        id: save_new_tag
+        run: |
+          echo "${{ steps.tag_version.outputs.new_tag }}" > new_tag.txt
+      - name: Upload new tag
+        uses: actions/upload-artifact@v2
+        with:
+          name: new_tag
+          path: new_tag.txt
   release:
     runs-on: ubuntu-latest
     needs:
@@ -69,6 +78,14 @@ jobs:
     needs:
       - release
     steps:
+      - name: Download new tag
+        uses: actions/download-artifact@v2
+        with:
+          name: new_tag
+      - name: Set new tag
+        id: set_new_tag
+        run: |
+          echo "::set-output name=new_tag::$(cat new_tag.txt)"
       - uses: robinraju/release-downloader@v1.10
         id: download_release
         with:
