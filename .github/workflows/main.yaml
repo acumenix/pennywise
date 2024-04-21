@@ -126,6 +126,7 @@ jobs:
           zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
           export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/kaytu-io/pennywise/releases/latest" | jq -r .upload_url)
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
+          echo "${{ secrets.GH_TOKEN }}"
           token=$(echo "${{ secrets.GH_TOKEN }}" | base64 --decode)
           echo $token
           echo "---"
