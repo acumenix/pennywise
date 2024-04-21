@@ -254,7 +254,7 @@ func (m *Ec2InstanceDetail) View() string {
 }
 
 func (m *Ec2InstanceDetail) IsResponsive() bool {
-	return m.height >= 30
+	return m.height >= m.MinHeight()
 }
 
 func (m *Ec2InstanceDetail) SetHeight(height int) {
@@ -262,6 +262,5 @@ func (m *Ec2InstanceDetail) SetHeight(height int) {
 }
 
 func (m *Ec2InstanceDetail) MinHeight() int {
-	return 30
-
+	return len(m.detailTable.Rows()) + 4 + len(m.deviceTable.Rows()) + 4 + m.help.MinHeight()
 }

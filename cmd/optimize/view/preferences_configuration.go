@@ -231,7 +231,7 @@ func (m *PreferencesConfiguration) prevInput() {
 }
 
 func (m *PreferencesConfiguration) IsResponsive() bool {
-	return m.height >= 30
+	return m.height >= m.MinHeight()
 }
 
 func (m *PreferencesConfiguration) SetHeight(height int) {
@@ -239,5 +239,5 @@ func (m *PreferencesConfiguration) SetHeight(height int) {
 }
 
 func (m *PreferencesConfiguration) MinHeight() int {
-	return 30
+	return len(m.pref) + 2 + m.help.height
 }
