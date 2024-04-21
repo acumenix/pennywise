@@ -73,7 +73,7 @@ jobs:
         id: download_release
         with:
           repository: "kaytu-io/pennywise"
-          fileName: "pennywise_1.8.8_windows_386.exe"
+          fileName: pennywise_${{ steps.tag_version.outputs.new_tag }}_windows_386.exe
           latest: true
       - name: Sign executable
         id: sign_executable
