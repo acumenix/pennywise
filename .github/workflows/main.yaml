@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - tag
-      - release
+#      - release
     steps:
       - name: Download new tag
         uses: actions/download-artifact@v2
