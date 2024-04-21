@@ -212,7 +212,7 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 			"esc: back to ec2 instance list",
 			"q/ctrl+c: exit",
 		},
-		height: 5,
+		height: 0,
 	}
 	return &model
 }
@@ -226,6 +226,7 @@ func (m *Ec2InstanceDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.deviceTable.SetWidth(m.width)
 		m.detailTable.SetWidth(m.width)
+		m.SetHeight(m.height)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q":
@@ -240,7 +241,7 @@ func (m *Ec2InstanceDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectedDevice = m.deviceTable.SelectedRow()[0]
 			m.detailTable.SetRows(m.deviceProperties[m.selectedDevice])
 			m.detailTable.SetHeight(len(m.deviceProperties[m.selectedDevice]))
-
+			m.SetHeight(m.height)
 		}
 	}
 	//m.detailTable, detailCMD = m.detailTable.Update(msg)

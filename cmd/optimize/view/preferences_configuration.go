@@ -74,7 +74,7 @@ func NewPreferencesConfiguration(preferences []preferences2.PreferenceItem, clos
 				"tab: pin/unpin value to current ec2 instance",
 				"ctrl+c: exit",
 			},
-			height: 8,
+			height: 0,
 		},
 	}
 }
