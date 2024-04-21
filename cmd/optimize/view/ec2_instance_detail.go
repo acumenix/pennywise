@@ -142,7 +142,7 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		{Title: "DeviceID", Width: 30},
 		{Title: "ResourceType", Width: 20},
 		{Title: "Cost", Width: 10},
-		{Title: "Saving", Width: 10},
+		{Title: "Potential Savings", Width: 20},
 	}
 	deviceRows := []table.Row{
 		{
@@ -153,11 +153,12 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		},
 	}
 	for _, v := range item.Instance.BlockDeviceMappings {
+		saving := item.RightSizingRecommendation.VolumesCurrentCosts[hash.HashString(*v.Ebs.VolumeId)] - item.RightSizingRecommendation.VolumesTargetCosts[hash.HashString(*v.Ebs.VolumeId)]
 		deviceRows = append(deviceRows, table.Row{
 			*v.Ebs.VolumeId,
 			"EBS Volume",
-			"",
-			"",
+			fmt.Sprintf("%.2f", item.RightSizingRecommendation.VolumesCurrentCosts[hash.HashString(*v.Ebs.VolumeId)]),
+			fmt.Sprintf("%.2f", saving),
 		})
 	}
 
