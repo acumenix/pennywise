@@ -77,35 +77,14 @@ jobs:
 #          COSIGN_SECRET: ${{ secrets.COSIGN_SECRET }}
   sign-windows:
     runs-on: ubuntu-latest
-    needs:
-      - tag
-#      - release
+    #    needs:
+    #      - release
     steps:
-      - name: Download new tag
-        uses: actions/download-artifact@v2
-        with:
-          name: new_tag
-      - name: Set new tag
-        id: set_new_tag
-        run: |
-          echo "::set-output name=new_tag::$(cat new_tag.txt)"
       - uses: robinraju/release-downloader@v1.10
-        id: download_release_386
+        id: download_release
         with:
           repository: "kaytu-io/pennywise"
           fileName: "pennywise_1.8.13_windows_386.exe"
-          latest: true
-      - uses: robinraju/release-downloader@v1.10
-        id: download_release_arm64
-        with:
-          repository: "kaytu-io/pennywise"
-          fileName: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe
-          latest: true
-      - uses: robinraju/release-downloader@v1.10
-        id: download_release_amd64
-        with:
-          repository: "kaytu-io/pennywise"
-          fileName: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe
           latest: true
       - name: Sign executable
         id: sign_executable
@@ -118,75 +97,19 @@ jobs:
           sudo apt-get -y install osslsigncode
           echo "${{ secrets.SELFSIGNED_KEY }}" | base64 --decode > cert.key
           echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode > cert.crt
-          echo "${{ fromJson(steps.download_release_386.outputs.downloaded_files)[0] }}" > pennywise_1.8.13_windows_386.exe
-          echo "${{ fromJson(steps.download_release_arm64.outputs.downloaded_files)[0] }}" > pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe
-          echo "${{ fromJson(steps.download_release_amd64.outputs.downloaded_files)[0] }}" > pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe
+          echo "${{ fromJson(steps.download_release.outputs.downloaded_files)[0] }}" > pennywise_1.8.3_windows_386.exe
           ls
-          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_1.8.13_windows_386.exe -out pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.exe
-          zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.exe
-          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe -out pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.exe
-          zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.exe
-          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe -out pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
-          zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
+          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_1.8.13_windows_386.exe -out pennywise_1.8.13_windows_386_signed.exe
           export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/kaytu-io/pennywise/releases/latest" | jq -r .upload_url)
+          echo $UPLOAD_URL
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
-      - name: Upload Release Asset 386
-        id: upload-release-asset-386
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.exe
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe
-          asset_content_type: application/octet-stream
-      - name: Upload Release Asset 386 zip
-        id: upload-release-asset-386-zip
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.zip
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.zip
-          asset_content_type: application/zip
-      - name: Upload Release Asset arm64
-        id: upload-release-asset-arm64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.exe
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe
-          asset_content_type: application/octet-stream
-      - name: Upload Release Asset arm64 zip
-        id: upload-release-asset-arm64-zip
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.zip
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.zip
-          asset_content_type: application/octet-stream
       - name: Upload Release Asset
-        id: upload-release-asset-amd64
+        id: upload-release-asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe
-          asset_content_type: application/octet-stream
-      - name: Upload Release Asset amd64 zip
-        id: upload-release-asset-amd64-zip
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.zip
+          asset_path: ./pennywise_1.8.13_windows_386_signed.exe
+          asset_name: pennywise_1.8.13_windows_386_signed.exe
           asset_content_type: application/octet-stream
