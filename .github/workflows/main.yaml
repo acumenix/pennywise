@@ -66,8 +66,8 @@ jobs:
 #          COSIGN_SECRET: ${{ secrets.COSIGN_SECRET }}
   sign-windows:
     runs-on: ubuntu-latest
-    needs:
-      - release
+#    needs:
+#      - release
     steps:
       - name: Sign executable
         env:
