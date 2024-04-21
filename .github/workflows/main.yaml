@@ -79,6 +79,8 @@ jobs:
           sudo apt-get -y install osslsigncode
           echo $CODESIGN_KEY > cert.key
           echo $CODESIGN_CRT > cert.crt
+          cat cert.key
+          cat cert.crt
           osslsigncode sign -certs cert.crt -key cert.key \
                   -n "Pennywise" -i https://kaytu.io/ \
                   -in target/release/pennywise_1.8.3_windows_386.exe  -out target/release/pennywise_1.8.3_windows_386_signed.exe
