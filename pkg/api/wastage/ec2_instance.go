@@ -30,7 +30,7 @@ type EC2Volume struct {
 	Size             *int32           `json:"size"`
 	Iops             *int32           `json:"iops"`
 	AvailabilityZone *string          `json:"availabilityZone"`
-	Throughput       *int32           `json:"throughput"`
+	Throughput       *float64         `json:"throughput"`
 }
 
 type EC2InstanceWastageRequest struct {
@@ -62,17 +62,23 @@ type RightSizingRecommendation struct {
 	CurrentMemory            string `json:"currentMemory"`
 	TargetMemory             string `json:"targetMemory"`
 
-	VolumesCurrentSizes      map[string]int32            `json:"volumeCurrentSizes"`
-	VolumesTargetSizes       map[string]int32            `json:"volumeTargetSizes"`
-	VolumesCurrentTypes      map[string]types.VolumeType `json:"volumeCurrentTypes"`
-	VolumesTargetTypes       map[string]types.VolumeType `json:"volumeTargetTypes"`
-	VolumesCurrentIOPS       map[string]int32            `json:"volumeCurrentIOPS"`
-	VolumesTargetIOPS        map[string]int32            `json:"volumeTargetIOPS"`
-	VolumesCurrentThroughput map[string]int32            `json:"volumeCurrentThroughput"`
-	VolumesTargetThroughput  map[string]int32            `json:"volumeTargetThroughput"`
-	VolumesCurrentCosts      map[string]float64          `json:"volumeCurrentCosts"`
-	VolumesTargetCosts       map[string]float64          `json:"volumeTargetCosts"`
-	VolumesSaving            map[string]float64          `json:"volumeSaving"`
+	VolumesCurrentSizes map[string]int32 `json:"volumeCurrentSizes"`
+	VolumesTargetSizes  map[string]int32 `json:"volumeTargetSizes"`
+
+	VolumesCurrentTypes map[string]types.VolumeType `json:"volumeCurrentTypes"`
+	VolumesTargetTypes  map[string]types.VolumeType `json:"volumeTargetTypes"`
+
+	VolumesCurrentIOPS     map[string]int32   `json:"volumeCurrentIOPS"`
+	VolumesTargetIOPS      map[string]int32   `json:"volumeTargetIOPS"`
+	VolumesIOPSUtilization map[string]float64 `json:"volumesIOPSUtilization"`
+
+	VolumesCurrentThroughput     map[string]float64 `json:"volumeCurrentThroughput"`
+	VolumesThroughputUtilization map[string]float64 `json:"volumesThroughputUtilization"`
+	VolumesTargetThroughput      map[string]float64 `json:"volumeTargetThroughput"`
+
+	VolumesCurrentCosts map[string]float64 `json:"volumeCurrentCosts"`
+	VolumesTargetCosts  map[string]float64 `json:"volumeTargetCosts"`
+	VolumesSaving       map[string]float64 `json:"volumeSaving"`
 }
 
 type EC2InstanceWastageResponse struct {

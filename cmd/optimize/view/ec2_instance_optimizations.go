@@ -15,6 +15,8 @@ import (
 var baseStyle = lipgloss.NewStyle().
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderForeground(lipgloss.Color("240"))
+var costStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+var savingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 
 type OptimizationItem struct {
 	Instance            types.Instance
@@ -51,7 +53,6 @@ func NewEC2InstanceOptimizations(instanceChan chan OptimizationItem) *Ec2Instanc
 		{Title: "Instance Type", Width: 15},
 		{Title: "Region", Width: 15},
 		{Title: "Platform", Width: 15},
-		{Title: "Optimized Instance Type", Width: 25},
 		{Title: "Total Saving (Monthly)", Width: 25},
 	}
 
@@ -136,17 +137,24 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						totalSaving += s
 					}
 
+					//name := ""
+					//for _, t := range i.Instance.Tags {
+					//	if t.Key != nil && strings.ToLower(*t.Key) == "name" && t.Value != nil {
+					//		name = *t.Value
+					//	}
+					//}
+					//if name != "" {
+					//	name = *i.Instance.InstanceId
+					//}
 					row := table.Row{
 						*i.Instance.InstanceId,
 						string(i.Instance.InstanceType),
 						i.Region,
 						platform,
-						i.RightSizingRecommendation.TargetInstanceType,
 						fmt.Sprintf("$%.2f", totalSaving),
 					}
 					if i.OptimizationLoading {
-						row[4] = "..."
-						row[5] = "..."
+						row[4] = "loading"
 					}
 					rows = append(rows, row)
 				}
@@ -242,7 +250,23 @@ func (m *Ec2InstanceOptimizations) View() string {
 	if m.prefConf != nil {
 		return m.prefConf.View()
 	}
-	return baseStyle.Render(m.table.View()) + "\n" +
+
+	totalCost := 0.0
+	savings := 0.0
+	for _, i := range m.items {
+		totalCost += i.RightSizingRecommendation.CurrentCost
+		savings += i.RightSizingRecommendation.Saving
+
+		for _, v := range i.RightSizingRecommendation.VolumesCurrentCosts {
+			totalCost += v
+		}
+		for _, v := range i.RightSizingRecommendation.VolumesCurrentCosts {
+			savings += v
+		}
+	}
+	return "Current runtime cost: " + costStyle.Render(fmt.Sprintf("$%.2f", totalCost)) +
+		", Savings: " + savingStyle.Render(fmt.Sprintf("$%.2f", savings)) + "\n" +
+		baseStyle.Render(m.table.View()) + "\n" +
 		m.help.String()
 }
 
@@ -252,7 +276,7 @@ func (m *Ec2InstanceOptimizations) SendItem(item OptimizationItem) {
 
 func (m *Ec2InstanceOptimizations) UpdateResponsive() {
 	defer func() {
-		m.table.SetHeight(m.tableHeight - 4)
+		m.table.SetHeight(m.tableHeight - 5)
 		if m.prefConf != nil {
 			m.prefConf.SetHeight(m.tableHeight)
 		}
@@ -266,7 +290,7 @@ func (m *Ec2InstanceOptimizations) UpdateResponsive() {
 		return
 	}
 
-	m.tableHeight = 5
+	m.tableHeight = 6
 	m.help.SetHeight(m.help.MinHeight())
 
 	checkResponsive := func() bool {
@@ -314,7 +338,7 @@ func (m *Ec2InstanceOptimizations) MinHeight() int {
 	if m.detailsPage != nil {
 		return m.detailsPage.MinHeight()
 	}
-	return m.help.MinHeight() + 5
+	return m.help.MinHeight() + 5 + 1
 }
 
 func (m *Ec2InstanceOptimizations) PreferredMinHeight() int {

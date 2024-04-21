@@ -24,12 +24,6 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 	res := map[string][]table.Row{
 		*item.Instance.InstanceId: {
 			{
-				"Instance ID",
-				*item.Instance.InstanceId,
-				"",
-				"",
-			},
-			{
 				"Region",
 				item.Region,
 				"",
@@ -54,7 +48,7 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 				item.RightSizingRecommendation.TargetMemory,
 			},
 			{
-				"Bandwidth",
+				"Network Bandwidth",
 				item.RightSizingRecommendation.CurrentNetworkPerformance,
 				item.RightSizingRecommendation.AvgNetworkBandwidth,
 				item.RightSizingRecommendation.TargetNetworkPerformance,
@@ -90,12 +84,6 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 		}
 		res[*v.VolumeId] = []table.Row{
 			{
-				"Volume ID",
-				*v.VolumeId,
-				"",
-				"",
-			},
-			{
 				"Volume Type",
 				string(v.VolumeType),
 				"",
@@ -110,14 +98,14 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 			{
 				"IOPS",
 				fmt.Sprintf("%d", volumeIops),
-				"",
+				fmt.Sprintf("Avg: %.2f", item.RightSizingRecommendation.VolumesIOPSUtilization[vid]),
 				fmt.Sprintf("%d", item.RightSizingRecommendation.VolumesTargetIOPS[vid]),
 			},
 			{
 				"Throughput",
 				fmt.Sprintf("%d Mbps", volumeThroughput),
-				"",
-				fmt.Sprintf("%d Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid]),
+				fmt.Sprintf("Avg: %.2f Mbps", item.RightSizingRecommendation.VolumesThroughputUtilization[vid]),
+				fmt.Sprintf("%.2f Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid]),
 			},
 			{
 				"Total Cost (Monthly)",
@@ -148,8 +136,8 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		{
 			*item.Instance.InstanceId,
 			"EC2 Instance",
-			fmt.Sprintf("%.2f", item.RightSizingRecommendation.CurrentCost),
-			fmt.Sprintf("%.2f", item.RightSizingRecommendation.CurrentCost-item.RightSizingRecommendation.TargetCost),
+			fmt.Sprintf("$%.2f", item.RightSizingRecommendation.CurrentCost),
+			fmt.Sprintf("$%.2f", item.RightSizingRecommendation.CurrentCost-item.RightSizingRecommendation.TargetCost),
 		},
 	}
 	for _, v := range item.Instance.BlockDeviceMappings {
@@ -157,14 +145,14 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		deviceRows = append(deviceRows, table.Row{
 			*v.Ebs.VolumeId,
 			"EBS Volume",
-			fmt.Sprintf("%.2f", item.RightSizingRecommendation.VolumesCurrentCosts[hash.HashString(*v.Ebs.VolumeId)]),
-			fmt.Sprintf("%.2f", saving),
+			fmt.Sprintf("$%.2f", item.RightSizingRecommendation.VolumesCurrentCosts[hash.HashString(*v.Ebs.VolumeId)]),
+			fmt.Sprintf("$%.2f", saving),
 		})
 	}
 
 	detailColumns := []table.Column{
 		{Title: "Properties", Width: 30},
-		{Title: "Provisioned", Width: 20},
+		{Title: "Current", Width: 20},
 		{Title: "Utilization", Width: 20},
 		{Title: "Suggested", Width: 20},
 	}

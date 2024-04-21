@@ -169,6 +169,22 @@ func (m *App) ProcessInstances(awsCfg aws.Config, accountHash, idHash, arnHash s
 	}
 }
 
+func averageOfDatapoints(datapoints []types2.Datapoint) float64 {
+	if len(datapoints) == 0 {
+		return 0.0
+	}
+
+	avg := float64(0)
+	for _, dp := range datapoints {
+		if dp.Average == nil {
+			continue
+		}
+		avg += *dp.Average
+	}
+	avg = avg / float64(len(datapoints))
+	return avg
+}
+
 func (m *App) ProcessInstance(awsConf aws.Config, item OptimizationItem, accountHash, idHash, arnHash string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -221,6 +237,18 @@ func (m *App) ProcessInstance(awsConf aws.Config, item OptimizationItem, account
 		item.OptimizationLoading = false
 		m.optimizationsTable.SendItem(item)
 		return
+	}
+
+	res.RightSizing.VolumesThroughputUtilization = map[string]float64{}
+	res.RightSizing.VolumesIOPSUtilization = map[string]float64{}
+	for volumeID, v := range req.VolumeMetrics {
+		readBytesAvg := averageOfDatapoints(v["VolumeReadBytes"])
+		writeBytesAvg := averageOfDatapoints(v["VolumeWriteBytes"])
+		res.RightSizing.VolumesThroughputUtilization[volumeID] = (readBytesAvg + writeBytesAvg) / 1000000.0
+
+		readOpsAvg := averageOfDatapoints(v["VolumeReadOps"])
+		writeOpsAvg := averageOfDatapoints(v["VolumeWriteOps"])
+		res.RightSizing.VolumesIOPSUtilization[volumeID] = readOpsAvg + writeOpsAvg
 	}
 
 	m.optimizationsTable.SendItem(OptimizationItem{
@@ -593,12 +621,17 @@ func (m *App) UpdateResponsive() {
 }
 
 func toEBSVolume(v types.Volume) wastage.EC2Volume {
+	var throughput *float64
+	if v.Throughput != nil {
+		throughput = aws.Float64(float64(*v.Throughput))
+	}
+
 	return wastage.EC2Volume{
 		HashedVolumeId:   hash.HashString(*v.VolumeId),
 		VolumeType:       v.VolumeType,
 		Size:             v.Size,
 		Iops:             v.Iops,
 		AvailabilityZone: v.AvailabilityZone,
-		Throughput:       v.Throughput,
+		Throughput:       throughput,
 	}
 }
