@@ -126,13 +126,9 @@ jobs:
           zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
           export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/kaytu-io/pennywise/releases/latest" | jq -r .upload_url)
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
-          echo "${{ secrets.GH_TOKEN }}"
-          token=$(echo "${{ secrets.GH_TOKEN }}" | base64 --decode)
-          echo $token
-          echo "---"
           release_id=$(curl --request GET \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/latest \
-            --header 'authorization: Bearer ' | jq '.id')
+            --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}' | jq '.id')
           echo $release_id
           assets=$(curl --request GET \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/$release_id/assets \
