@@ -88,15 +88,15 @@ jobs:
           echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode > cert.crt
           echo "${{ fromJson(steps.download_release.outputs.downloaded_files)[0] }}" > pennywise_1.8.3_windows_386.exe
           osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_1.8.8_windows_386.exe -out pennywise_1.8.8_windows_386_signed.exe
-          export pennywise_windows_signed=$(cat pennywise_1.8.8_windows_386_signed.exe)
-          echo "RELEASE_BODY=$pennywise_windows_signed" >> $GITHUB_OUTPUT
-      - name: Upload Binaries to Release
-        uses: svenstaro/upload-release-action@v2
+          export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/OWNER/REPO/releases/latest" | jq -r .upload_url)
+          echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
-          repo_name: "kaytu-io/pennywise"
-          repo_token: ${{ secrets.GH_TOKEN }}
-          tag: ${{ github.ref }}
-          file: target/release/pennywise_windows_signed
-          overwrite: true
-          body: |
-              ${{ steps.sign_executable.outputs.RELEASE_BODY }}
+          upload_url: ${{ steps.sign_executable.outputs.upload_url }}
+          asset_path: ./pennywise_1.8.8_windows_386_signed.exe
+          asset_name: pennywise_1.8.8_windows_386_signed.exe
+          asset_content_type: application/octet-stream
