@@ -130,13 +130,19 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if i.Instance.PlatformDetails != nil {
 						platform = *i.Instance.PlatformDetails
 					}
+
+					totalSaving := i.RightSizingRecommendation.Saving
+					for _, s := range i.RightSizingRecommendation.VolumesSaving {
+						totalSaving += s
+					}
+
 					row := table.Row{
 						*i.Instance.InstanceId,
 						string(i.Instance.InstanceType),
 						i.Region,
 						platform,
 						i.RightSizingRecommendation.TargetInstanceType,
-						fmt.Sprintf("$%.2f", i.RightSizingRecommendation.Saving),
+						fmt.Sprintf("$%.2f", totalSaving),
 					}
 					if i.OptimizationLoading {
 						row[4] = "..."
