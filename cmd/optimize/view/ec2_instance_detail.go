@@ -98,14 +98,14 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 			{
 				"IOPS",
 				fmt.Sprintf("%d", volumeIops),
-				fmt.Sprintf("%d", item.RightSizingRecommendation.VolumesTargetIOPS[vid]),
+				fmt.Sprintf("Avg: %.2f", item.RightSizingRecommendation.VolumesIOPSUtilization[vid]),
 				fmt.Sprintf("%d", item.RightSizingRecommendation.VolumesTargetIOPS[vid]),
 			},
 			{
 				"Throughput",
 				fmt.Sprintf("%d Mbps", volumeThroughput),
-				fmt.Sprintf("%d Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid]),
-				fmt.Sprintf("%d Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid]),
+				fmt.Sprintf("Avg: %.2f Mbps", item.RightSizingRecommendation.VolumesThroughputUtilization[vid]),
+				fmt.Sprintf("%.2f Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid]),
 			},
 			{
 				"Total Cost (Monthly)",
@@ -152,7 +152,7 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 
 	detailColumns := []table.Column{
 		{Title: "Properties", Width: 30},
-		{Title: "Provisioned", Width: 20},
+		{Title: "Current", Width: 20},
 		{Title: "Utilization", Width: 20},
 		{Title: "Suggested", Width: 20},
 	}
