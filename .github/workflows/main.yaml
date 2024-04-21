@@ -6,64 +6,64 @@ on:
       - main
 
 jobs:
-  tag:
-    runs-on: ubuntu-latest
-    outputs:
-      latest_tag: ${{ steps.set_latest_tag.outputs.latest_tag }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GH_TOKEN }}
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: stable
-      - name: Tag version
-        id: tag_version
-        uses: mathieudutour/github-tag-action@v6.1
-        with:
-          github_token: ${{ secrets.GH_TOKEN }}
-          release_branches: main
-          tag_prefix: v
-      - name: Set latest tag output
-        id: set_latest_tag
-        run: |
-          if [[ -z "${{ steps.tag_version.outputs.new_tag }}" ]]; then
-            echo "latest_tag=${{ steps.tag_version.outputs.previous_tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "latest_tag=${{ steps.tag_version.outputs.new_tag }}" >> "$GITHUB_OUTPUT"
-          fi
-  release:
-    runs-on: ubuntu-latest
-    needs:
-      - tag
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GH_TOKEN }}
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: stable
-      - name: Install cosign
-        run: |
-          curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
-          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
-          sudo chmod +x /usr/local/bin/cosign
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
-          COSIGN_SECRET: ${{ secrets.COSIGN_SECRET }}
+#  tag:
+#    runs-on: ubuntu-latest
+#    outputs:
+#      latest_tag: ${{ steps.set_latest_tag.outputs.latest_tag }}
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#        with:
+#          fetch-depth: 0
+#          token: ${{ secrets.GH_TOKEN }}
+#      - name: Set up Go
+#        uses: actions/setup-go@v4
+#        with:
+#          go-version: stable
+#      - name: Tag version
+#        id: tag_version
+#        uses: mathieudutour/github-tag-action@v6.1
+#        with:
+#          github_token: ${{ secrets.GH_TOKEN }}
+#          release_branches: main
+#          tag_prefix: v
+#      - name: Set latest tag output
+#        id: set_latest_tag
+#        run: |
+#          if [[ -z "${{ steps.tag_version.outputs.new_tag }}" ]]; then
+#            echo "latest_tag=${{ steps.tag_version.outputs.previous_tag }}" >> "$GITHUB_OUTPUT"
+#          else
+#            echo "latest_tag=${{ steps.tag_version.outputs.new_tag }}" >> "$GITHUB_OUTPUT"
+#          fi
+#  release:
+#    runs-on: ubuntu-latest
+#    needs:
+#      - tag
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#        with:
+#          fetch-depth: 0
+#          token: ${{ secrets.GH_TOKEN }}
+#      - name: Set up Go
+#        uses: actions/setup-go@v4
+#        with:
+#          go-version: stable
+#      - name: Install cosign
+#        run: |
+#          curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
+#          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
+#          sudo chmod +x /usr/local/bin/cosign
+#      - name: Run GoReleaser
+#        uses: goreleaser/goreleaser-action@v5
+#        with:
+#          distribution: goreleaser
+#          version: latest
+#          args: release --clean
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+#          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
+#          COSIGN_SECRET: ${{ secrets.COSIGN_SECRET }}
   sign-windows:
     runs-on: ubuntu-latest
     needs:
@@ -77,7 +77,9 @@ jobs:
           sudo apt update -y && sudo apt -y install cmake libssl-dev libcurl4-openssl-dev zlib1g-dev python3
           sudo apt-get update -y
           sudo apt-get -y install osslsigncode
-          echo $CODESIGN_KEY | base64 --decode > cert.key
-          echo $CODESIGN_CRT | base64 --decode > cert.crt
+          echo "${{ secrets.SELFSIGNED_KEY }}" | base64 --decode > cert.key
+          echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode > cert.crt
+          echo "${{ secrets.SELFSIGNED_CRT }}"
+          echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode
           echo "here"
           osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in target/release/pennywise_1.8.3_windows_386.exe  -out target/release/pennywise_1.8.3_windows_386_signed.exe
