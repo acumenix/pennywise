@@ -35,6 +35,8 @@ type EC2Volume struct {
 
 type EC2InstanceWastageRequest struct {
 	HashedAccountID string                                   `json:"hashedAccountID"`
+	HashedUserID    string                                   `json:"hashedUserID"`
+	HashedARN       string                                   `json:"hashedARN"`
 	Instance        EC2Instance                              `json:"instance"`
 	Volumes         []EC2Volume                              `json:"volumes"`
 	Metrics         map[string][]types2.Datapoint            `json:"metrics"`
@@ -56,8 +58,9 @@ type RightSizingRecommendation struct {
 	TargetNetworkPerformance  string `json:"targetNetworkBandwidth"`
 	CurrentNetworkPerformance string `json:"currentNetworkPerformance"`
 
-	CurrentMemory string `json:"currentMemory"`
-	TargetMemory  string `json:"targetMemory"`
+	MaxMemoryUsagePercentage string `json:"maxMemoryUsagePercentage"`
+	CurrentMemory            string `json:"currentMemory"`
+	TargetMemory             string `json:"targetMemory"`
 
 	VolumesCurrentSizes      map[string]int32            `json:"volumeCurrentSizes"`
 	VolumesTargetSizes       map[string]int32            `json:"volumeTargetSizes"`

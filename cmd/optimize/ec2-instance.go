@@ -28,8 +28,10 @@ var ec2InstanceCommand = &cobra.Command{
 			return err
 		}
 		accountHash := hash.HashString(*out.Account)
+		userIdHash := hash.HashString(*out.UserId)
+		arnHash := hash.HashString(*out.Arn)
 
-		p := tea.NewProgram(view.NewApp(cfg, accountHash))
+		p := tea.NewProgram(view.NewApp(cfg, accountHash, userIdHash, arnHash))
 		if _, err := p.Run(); err != nil {
 			return err
 		}

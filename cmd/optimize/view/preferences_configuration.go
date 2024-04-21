@@ -80,6 +80,9 @@ func (m *PreferencesConfiguration) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyTab:
 			pref := m.pref[m.focused]
 			in := m.inputs[m.focused]
+			if !pref.CanBePinned {
+				break
+			}
 			pref.Pinned = !pref.Pinned
 			if pref.Pinned {
 				in.Placeholder = "Pinned to current EC2 Instance"
@@ -170,8 +173,12 @@ func (m *PreferencesConfiguration) View() string {
 
 	builder.WriteString("Configure your preferences:\n")
 	for idx, pref := range m.pref {
+		key := pref.Key
+		if len(pref.Unit) > 0 {
+			key = fmt.Sprintf("%s (%s)", key, pref.Unit)
+		}
 		builder.WriteString("  ")
-		builder.WriteString(inputStyle.Width(30).Render(pref.Key))
+		builder.WriteString(inputStyle.Width(30).Render(key))
 		builder.WriteString("    ")
 		builder.WriteString(m.inputs[idx].View())
 		builder.WriteString("\n")

@@ -49,7 +49,7 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 			{
 				"Memory",
 				item.RightSizingRecommendation.CurrentMemory,
-				item.AvgMemoryUsage,
+				item.RightSizingRecommendation.MaxMemoryUsagePercentage,
 				item.RightSizingRecommendation.TargetMemory,
 			},
 			{
@@ -60,21 +60,33 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 			},
 			{
 				"Total Cost (Monthly)",
-				fmt.Sprintf("$%v", item.RightSizingRecommendation.CurrentCost),
+				fmt.Sprintf("$%.2f", item.RightSizingRecommendation.CurrentCost),
 				"",
-				fmt.Sprintf("$%v", item.RightSizingRecommendation.TargetCost),
+				fmt.Sprintf("$%.2f", item.RightSizingRecommendation.TargetCost),
 			},
 			{
 				"Total Saving (Monthly)",
 				"",
 				"",
-				fmt.Sprintf("$%v", item.RightSizingRecommendation.Saving),
+				fmt.Sprintf("$%.2f", item.RightSizingRecommendation.Saving),
 			},
 		},
 	}
 
 	for _, v := range item.Volumes {
 		vid := hash.HashString(*v.VolumeId)
+		volumeSize := int32(0)
+		volumeThroughput := int32(0)
+		volumeIops := int32(0)
+		if v.Size != nil {
+			volumeSize = *v.Size
+		}
+		if v.Throughput != nil {
+			volumeThroughput = *v.Throughput
+		}
+		if v.Iops != nil {
+			volumeIops = *v.Iops
+		}
 		res[*v.VolumeId] = []table.Row{
 			{
 				"Volume ID",
@@ -90,19 +102,19 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 			},
 			{
 				"Size",
-				fmt.Sprintf("%d GB", *v.Size),
+				fmt.Sprintf("%d GB", volumeSize),
 				"",
 				fmt.Sprintf("%d GB", item.RightSizingRecommendation.VolumesTargetSizes[vid]),
 			},
 			{
 				"IOPS",
-				fmt.Sprintf("%d", *v.Iops),
+				fmt.Sprintf("%d", volumeIops),
 				"",
 				fmt.Sprintf("%d", item.RightSizingRecommendation.VolumesTargetIOPS[vid]),
 			},
 			{
 				"Throughput",
-				fmt.Sprintf("%d Mbps", *v.Throughput),
+				fmt.Sprintf("%d Mbps", volumeThroughput),
 				"",
 				fmt.Sprintf("%d Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid]),
 			},

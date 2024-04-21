@@ -22,8 +22,6 @@ type OptimizationItem struct {
 	Region              string
 	OptimizationLoading bool
 
-	AvgMemoryUsage string
-
 	Preferences               []preferences2.PreferenceItem
 	RightSizingRecommendation wastage.RightSizingRecommendation
 }
@@ -110,13 +108,17 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				var rows []table.Row
 				for _, i := range m.items {
+					platform := ""
+					if i.Instance.PlatformDetails != nil {
+						platform = *i.Instance.PlatformDetails
+					}
 					row := table.Row{
 						*i.Instance.InstanceId,
 						string(i.Instance.InstanceType),
 						i.Region,
-						*i.Instance.PlatformDetails,
+						platform,
 						i.RightSizingRecommendation.TargetInstanceType,
-						fmt.Sprintf("$%v", i.RightSizingRecommendation.Saving),
+						fmt.Sprintf("$%.2f", i.RightSizingRecommendation.Saving),
 					}
 					if i.OptimizationLoading {
 						row[4] = "..."
