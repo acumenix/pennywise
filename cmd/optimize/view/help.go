@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"math"
 	"strings"
 )
@@ -21,6 +22,11 @@ func (h *HelpView) String() string {
 		lines = h.joinLines(lines, int(joinCount))
 	}
 
+	var hlines []string
+	for _, line := range lines {
+		hlines = append(hlines, fmt.Sprintf("    %s", line))
+	}
+
 	prefix := ""
 	suffix := ""
 	if len(lines) < h.height {
@@ -29,7 +35,7 @@ func (h *HelpView) String() string {
 			prefix = "\n"
 		}
 	}
-	return prefix + helpStyle.Render(strings.Join(lines, "\n")) + suffix + "\n"
+	return prefix + helpStyle.Render(strings.Join(hlines, "\n")) + suffix + "\n"
 }
 
 func (h *HelpView) joinLines(lines []string, n int) []string {

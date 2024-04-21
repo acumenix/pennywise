@@ -7,7 +7,6 @@ import (
 	types2 "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	preferences2 "github.com/kaytu-io/pennywise/cmd/optimize/preferences"
@@ -45,7 +44,7 @@ type App struct {
 }
 
 var (
-	helpStyle  = list.DefaultStyles().HelpStyle.PaddingLeft(4).Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"})
+	helpStyle  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"})
 	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 )
 
@@ -124,6 +123,9 @@ func (m *App) FailedJobs() ([]string, bool) {
 }
 
 func (m *App) View() string {
+	if !m.checkResponsive() {
+		return "Application cannot be rendered in this screen size, please increase height of your terminal"
+	}
 	sb := strings.Builder{}
 	sb.WriteString(m.optimizationsTable.View())
 	//sb.WriteString("\n")
@@ -549,6 +551,10 @@ func (m *App) getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, ins
 	}, nil
 }
 
+func (m *App) checkResponsive() bool {
+	return m.height >= m.jobs.height+m.optimizationsTable.height && m.jobs.IsResponsive() && m.optimizationsTable.IsResponsive()
+}
+
 func (m *App) UpdateResponsive() {
 	m.optimizationsTable.SetHeight(m.optimizationsTable.MinHeight())
 	m.jobs.SetHeight(m.jobs.MinHeight())
@@ -557,17 +563,13 @@ func (m *App) UpdateResponsive() {
 		i++
 	}()
 
-	checkResponsive := func() bool {
-		return m.height >= m.jobs.height+m.optimizationsTable.height && m.jobs.IsResponsive() && m.optimizationsTable.IsResponsive()
-	}
-
-	if !checkResponsive() {
+	if !m.checkResponsive() {
 		return // nothing to do
 	}
 
 	for m.optimizationsTable.height < m.optimizationsTable.PreferredMinHeight() {
 		m.optimizationsTable.SetHeight(m.optimizationsTable.height + 1)
-		if !checkResponsive() {
+		if !m.checkResponsive() {
 			m.optimizationsTable.SetHeight(m.optimizationsTable.height - 1)
 			return
 		}
@@ -575,7 +577,7 @@ func (m *App) UpdateResponsive() {
 
 	for m.jobs.height < m.jobs.MaxHeight() {
 		m.jobs.SetHeight(m.jobs.height + 1)
-		if !checkResponsive() {
+		if !m.checkResponsive() {
 			m.jobs.SetHeight(m.jobs.height - 1)
 			return
 		}
@@ -583,7 +585,7 @@ func (m *App) UpdateResponsive() {
 
 	for m.optimizationsTable.height < m.optimizationsTable.MaxHeight() {
 		m.optimizationsTable.SetHeight(m.optimizationsTable.height + 1)
-		if !checkResponsive() {
+		if !m.checkResponsive() {
 			m.optimizationsTable.SetHeight(m.optimizationsTable.height - 1)
 			return
 		}

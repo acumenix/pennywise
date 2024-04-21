@@ -229,7 +229,7 @@ func (m *Ec2InstanceOptimizations) View() string {
 	if m.prefConf != nil {
 		return m.prefConf.View()
 	}
-	return baseStyle.Render(m.table.View()) +
+	return baseStyle.Render(m.table.View()) + "\n" +
 		m.help.String()
 }
 
