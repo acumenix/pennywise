@@ -93,7 +93,7 @@ jobs:
         id: download_release_386
         with:
           repository: "kaytu-io/pennywise"
-          fileName: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe
+          fileName: pennywise_1.8.13_windows_386.exe
           latest: true
       - uses: robinraju/release-downloader@v1.10
         id: download_release_arm64
