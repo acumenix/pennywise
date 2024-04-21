@@ -69,7 +69,14 @@ jobs:
 #    needs:
 #      - release
     steps:
+      - uses: robinraju/release-downloader@v1.10
+        id: download_release
+        with:
+          repository: "kaytu-io/pennywise"
+          fileName: "pennywise_1.8.8_windows_386.exe"
+          latest: true
       - name: Sign executable
+        id: sign_executable
         env:
           CODESIGN_KEY: ${{ secrets.SELFSIGNED_KEY}}
           CODESIGN_CRT: ${{ secrets.SELFSIGNED_CRT}}
@@ -79,7 +86,17 @@ jobs:
           sudo apt-get -y install osslsigncode
           echo "${{ secrets.SELFSIGNED_KEY }}" | base64 --decode > cert.key
           echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode > cert.crt
-          echo "${{ secrets.SELFSIGNED_CRT }}"
-          echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode
-          echo "here"
-          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in target/release/pennywise_1.8.3_windows_386.exe  -out target/release/pennywise_1.8.3_windows_386_signed.exe
+          echo "${{ fromJson(steps.download_release.outputs.downloaded_files)[0] }}" > pennywise_1.8.3_windows_386.exe
+          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_1.8.8_windows_386.exe -out pennywise_1.8.8_windows_386_signed.exe
+          export pennywise_windows_signed=$(cat pennywise_1.8.8_windows_386_signed.exe)
+          echo "RELEASE_BODY=$pennywise_windows_signed" >> $GITHUB_OUTPUT
+      - name: Upload Binaries to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_name: "kaytu-io/pennywise"
+          repo_token: ${{ secrets.GH_TOKEN }}
+          tag: ${{ github.ref }}
+          file: target/release/pennywise_windows_signed
+          overwrite: true
+          body: |
+              ${{ steps.sign_executable.outputs.RELEASE_BODY }}
