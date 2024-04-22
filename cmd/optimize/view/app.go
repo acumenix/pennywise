@@ -35,6 +35,7 @@ type App struct {
 	jobChan     chan Job
 	runningJobs map[string]string
 	failedJobs  map[string]string
+	jobMutex    sync.RWMutex
 
 	optimizationsTable *Ec2InstanceOptimizations
 	jobs               JobsView
@@ -55,6 +56,7 @@ func NewApp(cfg aws.Config, accountHash string, idHash string, arnHash string) *
 		jobChan:             make(chan Job, 10000),
 		runningJobs:         map[string]string{},
 		failedJobs:          map[string]string{},
+		jobMutex:            sync.RWMutex{},
 		processInstanceChan: pi,
 		optimizationsTable:  NewEC2InstanceOptimizations(pi),
 	}
@@ -83,8 +85,10 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	m.jobMutex.RLock()
 	m.jobs.runningJobs, m.jobs.moreRunningJobs = m.RunningJobs()
 	m.jobs.failedJobs, m.jobs.moreFailedJobs = m.FailedJobs()
+	m.jobMutex.RUnlock()
 
 	_, optTableCmd := m.optimizationsTable.Update(msg)
 	return m, tea.Batch(optTableCmd)
@@ -142,6 +146,7 @@ func (m *App) UpdateStatus() {
 	for {
 		select {
 		case job := <-m.jobChan:
+			m.jobMutex.Lock()
 			if !job.Done {
 				m.runningJobs[job.ID] = job.Descrption
 			} else {
@@ -152,6 +157,7 @@ func (m *App) UpdateStatus() {
 			if len(job.FailureMessage) > 0 {
 				m.failedJobs[job.ID] = fmt.Sprintf("%s failed due to %s", job.Descrption, job.FailureMessage)
 			}
+			m.jobMutex.Unlock()
 
 		case err := <-m.errorChan:
 			m.statusErr = fmt.Sprintf("Failed due to %v", err)
@@ -563,7 +569,7 @@ func (m *App) getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, ins
 			HashedInstanceId:  hash.HashString(*instance.InstanceId),
 			State:             instance.State.Name,
 			InstanceType:      instance.InstanceType,
-			Platform:          instance.Platform,
+			Platform:          string(instance.Platform),
 			ThreadsPerCore:    *instance.CpuOptions.ThreadsPerCore,
 			CoreCount:         *instance.CpuOptions.CoreCount,
 			EbsOptimized:      *instance.EbsOptimized,

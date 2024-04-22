@@ -94,6 +94,11 @@ func NewEC2InstanceOptimizations(instanceChan chan OptimizationItem) *Ec2Instanc
 func (m *Ec2InstanceOptimizations) Init() tea.Cmd { return tickCmdWithDuration(time.Millisecond * 50) }
 
 func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.Width = msg.Width
+	}
+
 	if m.detailsPage != nil {
 		_, cmd := m.detailsPage.Update(msg)
 		return m, tea.Batch(cmd, tickCmdWithDuration(time.Millisecond*50))
@@ -187,7 +192,7 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// re-evaluate
 						m.instanceChan <- i
 						m.UpdateResponsive()
-					})
+					}, m.Width)
 					initCmd = m.prefConf.Init()
 					break
 				}
@@ -208,7 +213,7 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.prefConf = nil
 				m.clearScreen = true
 				m.UpdateResponsive()
-			})
+			}, m.Width)
 			initCmd = m.prefConf.Init()
 			m.UpdateResponsive()
 		case "enter":

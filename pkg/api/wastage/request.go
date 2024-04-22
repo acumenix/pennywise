@@ -36,8 +36,5 @@ func Ec2InstanceWastageRequest(reqBody EC2InstanceWastageRequest) (*EC2InstanceW
 	if err != nil {
 		return nil, fmt.Errorf("[requestAbout] : %v", err)
 	}
-	if response.RightSizing.TargetInstanceType == "" {
-		return nil, fmt.Errorf("%s", string(body))
-	}
 	return &response, nil
 }
