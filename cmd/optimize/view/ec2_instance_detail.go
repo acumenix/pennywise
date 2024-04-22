@@ -54,6 +54,12 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 				item.RightSizingRecommendation.TargetNetworkPerformance,
 			},
 			{
+				"EBS Bandwidth",
+				item.RightSizingRecommendation.CurrentEBSBandwidth,
+				item.RightSizingRecommendation.AvgEBSBandwidth,
+				item.RightSizingRecommendation.TargetEBSBandwidth,
+			},
+			{
 				"Total Cost (Monthly)",
 				fmt.Sprintf("$%.2f", item.RightSizingRecommendation.CurrentCost),
 				"",

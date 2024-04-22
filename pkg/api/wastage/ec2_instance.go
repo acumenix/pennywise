@@ -15,7 +15,7 @@ type EC2Instance struct {
 	HashedInstanceId  string                      `json:"hashedInstanceId"`
 	State             types.InstanceStateName     `json:"state"`
 	InstanceType      types.InstanceType          `json:"instanceType"`
-	Platform          types.PlatformValues        `json:"platform"`
+	Platform          string                      `json:"platform"`
 	ThreadsPerCore    int32                       `json:"threadsPerCore"`
 	CoreCount         int32                       `json:"coreCount"`
 	EbsOptimized      bool                        `json:"ebsOptimized"`
@@ -58,6 +58,10 @@ type RightSizingRecommendation struct {
 	TargetNetworkPerformance  string `json:"targetNetworkBandwidth"`
 	CurrentNetworkPerformance string `json:"currentNetworkPerformance"`
 
+	TargetEBSBandwidth  string `json:"targetEBSBandwidth"`
+	CurrentEBSBandwidth string `json:"currentEBSBandwidth"`
+	AvgEBSBandwidth     string `json:"avgEBSBandwidth"`
+
 	MaxMemoryUsagePercentage string `json:"maxMemoryUsagePercentage"`
 	CurrentMemory            string `json:"currentMemory"`
 	TargetMemory             string `json:"targetMemory"`
@@ -73,8 +77,8 @@ type RightSizingRecommendation struct {
 	VolumesIOPSUtilization map[string]float64 `json:"volumesIOPSUtilization"`
 
 	VolumesCurrentThroughput     map[string]float64 `json:"volumeCurrentThroughput"`
-	VolumesThroughputUtilization map[string]float64 `json:"volumesThroughputUtilization"`
 	VolumesTargetThroughput      map[string]float64 `json:"volumeTargetThroughput"`
+	VolumesThroughputUtilization map[string]float64 `json:"volumesThroughputUtilization"`
 
 	VolumesCurrentCosts map[string]float64 `json:"volumeCurrentCosts"`
 	VolumesTargetCosts  map[string]float64 `json:"volumeTargetCosts"`
