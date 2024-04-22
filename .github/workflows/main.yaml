@@ -135,39 +135,45 @@ jobs:
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}')
           echo $assets
           windows386=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe") | .id')
-          arm64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe") | .id')
-          amd64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe") | .id')
-          windows386zip=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.zip") | .id')
-          arm64zip=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.zip") | .id')
-          amd64zip=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.zip") | .id')
           curl --request DELETE \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$windows386 \
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          arm64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe") | .id')
           curl --request DELETE \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$arm64 \
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          amd64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe") | .id')
           curl --request DELETE \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$amd64 \
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          windows386zip=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.zip") | .id')
           curl --request DELETE \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$windows386zip \
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          arm64zip=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.zip") | .id')
           curl --request DELETE \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$arm64zip \
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          amd64zip=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.zip") | .id')
           curl --request DELETE \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$amd64zip \
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
-      - name: Upload Release Asset 386
-        id: upload-release-asset-386
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.exe
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.exe
-          asset_content_type: application/octet-stream
+          linuxarm64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_linux_arm64") | .id')
+                    curl --request DELETE \
+                      --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$linuxarm64 \
+                      --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          linuxamd64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_linux_amd64") | .id')
+                    curl --request DELETE \
+                      --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$linuxamd64 \
+                      --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          darwinarm64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_darwin_arm64") | .id')
+                    curl --request DELETE \
+                      --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$darwinarm64 \
+                      --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
+          darwinamd64=$(echo $assets | jq '.[] | select(.name=="pennywise_${{ steps.set_new_tag.outputs.new_tag }}_darwin_amd64") | .id')
+                    curl --request DELETE \
+                      --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$darwinamd64 \
+                      --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
       - name: Upload Release Asset 386 zip
         id: upload-release-asset-386-zip
         uses: actions/upload-release-asset@v1
@@ -178,16 +184,6 @@ jobs:
           asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386_signed.zip
           asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_386.zip
           asset_content_type: application/zip
-      - name: Upload Release Asset arm64
-        id: upload-release-asset-arm64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.exe
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.exe
-          asset_content_type: application/octet-stream
       - name: Upload Release Asset arm64 zip
         id: upload-release-asset-arm64-zip
         uses: actions/upload-release-asset@v1
@@ -198,16 +194,6 @@ jobs:
           asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64_signed.zip
           asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_arm64.zip
           asset_content_type: application/zip
-      - name: Upload Release Asset
-        id: upload-release-asset-amd64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          upload_url: ${{ steps.sign_executable.outputs.upload_url }}
-          asset_path: ./pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
-          asset_name: pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe
-          asset_content_type: application/octet-stream
       - name: Upload Release Asset amd64 zip
         id: upload-release-asset-amd64-zip
         uses: actions/upload-release-asset@v1
