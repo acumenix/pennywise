@@ -23,53 +23,52 @@ const (
 var (
 	inputStyle    = lipgloss.NewStyle().Foreground(hotPink)
 	continueStyle = lipgloss.NewStyle().Foreground(darkGray)
+	svcDisable    = lipgloss.NewStyle().Background(lipgloss.Color("#222222"))
+	svcEnable     = lipgloss.NewStyle().Background(lipgloss.Color("#aa2222"))
 )
 
 type PreferencesConfiguration struct {
-	inputs     []textinput.Model
-	focused    int
-	valueFocus int
-	err        error
-	height     int
-	help       HelpView
+	focused int
+	err     error
+	height  int
+	width   int
+	help    HelpView
 
-	pref  []preferences2.PreferenceItem
-	close func([]preferences2.PreferenceItem)
+	serviceList []string
+	serviceIdx  int
+	items       []*PreferenceItem
+	close       func([]preferences2.PreferenceItem)
 }
 
-func NewPreferencesConfiguration(preferences []preferences2.PreferenceItem, close func([]preferences2.PreferenceItem)) *PreferencesConfiguration {
-	var inputs []textinput.Model
+func NewPreferencesConfiguration(preferences []preferences2.PreferenceItem, close func([]preferences2.PreferenceItem), width int) *PreferencesConfiguration {
+	var items []*PreferenceItem
+	serviceList := []string{"All"}
+	for _, pref := range preferences {
+		items = append(items, NewPreferenceItem(pref))
 
-	for idx, pref := range preferences {
-		in := textinput.New()
-		if idx == 0 {
-			in.Focus()
-		}
-		in.CharLimit = pref.MaxCharacters
-		in.Width = pref.MaxCharacters + 5
-		if pref.Pinned {
-			in.Placeholder = "Pinned to current EC2 Instance"
-			in.Validate = pinnedValidator
-		} else {
-			in.Placeholder = "Any"
-			if pref.Value != nil {
-				in.SetValue(*pref.Value)
-			}
-			if pref.IsNumber {
-				in.Validate = numberValidator
+		exists := false
+		for _, sv := range serviceList {
+			if sv == pref.Service {
+				exists = true
 			}
 		}
-		inputs = append(inputs, in)
+
+		if !exists {
+			serviceList = append(serviceList, pref.Service)
+		}
 	}
+	items[0].Focus()
 	return &PreferencesConfiguration{
-		inputs: inputs,
-		pref:   preferences,
-		close:  close,
+		items:       items,
+		close:       close,
+		serviceList: serviceList,
+		width:       width,
 		help: HelpView{
 			lines: []string{
 				"↑/↓: move",
 				"enter: next field",
 				"←/→: prev/next value (for fields with specific values)",
+				"ctrl + ←/→: prev/next change service filter",
 				"esc: apply and exit",
 				"tab: pin/unpin value to current ec2 instance",
 				"ctrl+c: exit",
@@ -82,122 +81,90 @@ func NewPreferencesConfiguration(preferences []preferences2.PreferenceItem, clos
 func (m *PreferencesConfiguration) Init() tea.Cmd { return textinput.Blink }
 
 func (m *PreferencesConfiguration) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	cmds := make([]tea.Cmd, len(m.inputs))
-
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEscape:
-			m.close(m.pref)
+			var prefs []preferences2.PreferenceItem
+			for _, item := range m.items {
+				prefs = append(prefs, item.pref)
+			}
+			m.close(prefs)
 			return m, nil
-		case tea.KeyTab:
-			pref := m.pref[m.focused]
-			in := m.inputs[m.focused]
-			if !pref.CanBePinned {
-				break
-			}
-			pref.Pinned = !pref.Pinned
-			if pref.Pinned {
-				in.Placeholder = "Pinned to current EC2 Instance"
-				in.Validate = pinnedValidator
-				in.SetValue("")
-				pref.Value = nil
-			} else {
-				in.Placeholder = "Any"
-				in.Validate = nil
-				if len(pref.PossibleValues) > 0 {
-					in.SetValue(pref.PossibleValues[0])
-					in.CursorStart()
-				}
-				if pref.IsNumber {
-					in.Validate = numberValidator
-				}
-			}
-			m.pref[m.focused] = pref
-			m.inputs[m.focused] = in
-		case tea.KeyRight:
-			l := len(m.pref[m.focused].PossibleValues)
-			if l > 0 {
-				m.valueFocus = (m.valueFocus + 1) % l
-				m.inputs[m.focused].SetValue(m.pref[m.focused].PossibleValues[m.valueFocus])
-				m.inputs[m.focused].CursorStart()
-			}
-
-			if m.pref[m.focused].IsNumber {
-				curr, _ := strconv.ParseInt(m.inputs[m.focused].Value(), 10, 64)
-				curr++
-				m.inputs[m.focused].SetValue(fmt.Sprintf("%d", curr))
-				m.inputs[m.focused].CursorEnd()
-			}
-		case tea.KeyLeft:
-			l := len(m.pref[m.focused].PossibleValues)
-			if l > 0 {
-				m.valueFocus = (m.valueFocus - 1) % l
-				if m.valueFocus < 0 {
-					m.valueFocus = l - 1
-				}
-				m.inputs[m.focused].SetValue(m.pref[m.focused].PossibleValues[m.valueFocus])
-				m.inputs[m.focused].CursorStart()
-			}
-
-			if m.pref[m.focused].IsNumber {
-				curr, _ := strconv.ParseInt(m.inputs[m.focused].Value(), 10, 64)
-				curr--
-				m.inputs[m.focused].SetValue(fmt.Sprintf("%d", curr))
-				m.inputs[m.focused].CursorEnd()
-			}
 		case tea.KeyEnter:
 			m.nextInput()
-			m.valueFocus = 0
 		case tea.KeyUp:
 			m.prevInput()
-			m.valueFocus = 0
 		case tea.KeyDown:
 			m.nextInput()
-			m.valueFocus = 0
+		case tea.KeyCtrlRight:
+			m.serviceIdx++
+			if m.serviceIdx >= len(m.serviceList) {
+				m.serviceIdx = 0
+			}
+			m.ChangeService(m.serviceList[m.serviceIdx])
+		case tea.KeyCtrlLeft:
+			m.serviceIdx--
+			if m.serviceIdx < 0 {
+				m.serviceIdx = len(m.serviceList) - 1
+			}
+			m.ChangeService(m.serviceList[m.serviceIdx])
 		}
-		for i := range m.inputs {
-			m.inputs[i].Blur()
+		for i := range m.items {
+			m.items[i].Blur()
 		}
-		m.inputs[m.focused].Focus()
+		m.items[m.focused].Focus()
 
 	case errMsg:
 		m.err = msg
 		return m, nil
 	}
 
-	for i := range m.inputs {
-		if !m.pref[i].Pinned && len(m.pref[i].PossibleValues) == 0 {
-			m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
-		}
-
-		val := m.inputs[i].Value()
-		if len(val) > 0 {
-			m.pref[i].Value = &val
-		} else {
-			m.pref[i].Value = nil
-		}
-	}
-	return m, tea.Batch(cmds...)
+	_, cmd := m.items[m.focused].Update(msg)
+	return m, cmd
 }
 
 func (m *PreferencesConfiguration) View() string {
 	builder := strings.Builder{}
 
-	builder.WriteString("Configure your preferences:\n")
-	for idx, pref := range m.pref {
-		key := pref.Key
-		if len(pref.Unit) > 0 {
-			key = fmt.Sprintf("%s (%s)", key, pref.Unit)
+	builder.WriteString(svcDisable.Render("Configure your preferences: "))
+	for idx, svc := range m.serviceList {
+		if idx == m.serviceIdx {
+			builder.WriteString(svcEnable.Render(fmt.Sprintf(" %s ", svc)))
+		} else {
+			builder.WriteString(svcDisable.Render(fmt.Sprintf(" %s ", svc)))
 		}
-		builder.WriteString("  ")
-		builder.WriteString(inputStyle.Width(30).Render(key))
-		builder.WriteString("    ")
-		builder.WriteString(m.inputs[idx].View())
-		builder.WriteString("\n")
+	}
+	builder.WriteString(svcDisable.Render("    "))
+	builder.WriteString("\n\n")
+
+	for _, pref := range m.items {
+		builder.WriteString(pref.View())
 	}
 	builder.WriteString(m.help.String())
 	return builder.String()
+}
+
+func (m *PreferencesConfiguration) ChangeService(svc string) {
+	if svc == "All" {
+		for _, i := range m.items {
+			i.hidden = false
+			i.hideService = false
+		}
+		return
+	}
+
+	for _, i := range m.items {
+		if i.pref.Service == svc {
+			i.hidden = false
+			i.hideService = true
+		} else {
+			i.hidden = true
+			i.hideService = true
+		}
+	}
 }
 
 func pinnedValidator(s string) error {
@@ -219,14 +186,20 @@ func numberValidator(s string) error {
 }
 
 func (m *PreferencesConfiguration) nextInput() {
-	m.focused = (m.focused + 1) % len(m.inputs)
+	m.focused = (m.focused + 1) % len(m.items)
+	if m.items[m.focused].hidden {
+		m.nextInput()
+	}
 }
 
 func (m *PreferencesConfiguration) prevInput() {
 	m.focused--
 	// Wrap around
 	if m.focused < 0 {
-		m.focused = len(m.inputs) - 1
+		m.focused = len(m.items) - 1
+	}
+	if m.items[m.focused].hidden {
+		m.prevInput()
 	}
 }
 
@@ -236,9 +209,9 @@ func (m *PreferencesConfiguration) IsResponsive() bool {
 
 func (m *PreferencesConfiguration) SetHeight(height int) {
 	m.height = height
-	m.help.SetHeight(m.height - (len(m.pref) + 2))
+	m.help.SetHeight(m.height - (len(m.items) + 3))
 }
 
 func (m *PreferencesConfiguration) MinHeight() int {
-	return len(m.pref) + 2 + m.help.MinHeight()
+	return len(m.items) + 3 + m.help.MinHeight()
 }
