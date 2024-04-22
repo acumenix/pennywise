@@ -70,17 +70,26 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 
 	for _, v := range item.Volumes {
 		vid := hash.HashString(*v.VolumeId)
-		volumeSize := int32(0)
-		volumeThroughput := int32(0)
-		volumeIops := int32(0)
+		volumeSize := ""
+		volumeThroughput := ""
+		targetThroughput := "Not applicable"
+		volumeIops := ""
+		targetIops := "Not applicable"
 		if v.Size != nil {
-			volumeSize = *v.Size
+			volumeSize = fmt.Sprintf("%d GB", *v.Size)
 		}
 		if v.Throughput != nil {
-			volumeThroughput = *v.Throughput
+			volumeThroughput = fmt.Sprintf("%d Mbps", *v.Throughput)
 		}
+		if vt := item.RightSizingRecommendation.VolumesTargetTypes[vid]; vt == "gp3" {
+			targetThroughput = fmt.Sprintf("%.2f Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid])
+		}
+
 		if v.Iops != nil {
-			volumeIops = *v.Iops
+			volumeIops = fmt.Sprintf("%d", *v.Iops)
+		}
+		if vt := item.RightSizingRecommendation.VolumesTargetTypes[vid]; vt == "io1" || vt == "io2" || vt == "gp3" {
+			targetIops = fmt.Sprintf("%d", item.RightSizingRecommendation.VolumesTargetIOPS[vid])
 		}
 		res[*v.VolumeId] = []table.Row{
 			{
@@ -91,21 +100,21 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 			},
 			{
 				"Size",
-				fmt.Sprintf("%d GB", volumeSize),
+				volumeSize,
 				"",
 				fmt.Sprintf("%d GB", item.RightSizingRecommendation.VolumesTargetSizes[vid]),
 			},
 			{
 				"IOPS",
-				fmt.Sprintf("%d", volumeIops),
+				volumeIops,
 				fmt.Sprintf("Avg: %.2f", item.RightSizingRecommendation.VolumesIOPSUtilization[vid]),
-				fmt.Sprintf("%d", item.RightSizingRecommendation.VolumesTargetIOPS[vid]),
+				targetIops,
 			},
 			{
 				"Throughput",
-				fmt.Sprintf("%d Mbps", volumeThroughput),
+				volumeThroughput,
 				fmt.Sprintf("Avg: %.2f Mbps", item.RightSizingRecommendation.VolumesThroughputUtilization[vid]),
-				fmt.Sprintf("%.2f Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid]),
+				targetThroughput,
 			},
 			{
 				"Total Cost (Monthly)",
