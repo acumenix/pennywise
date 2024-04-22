@@ -55,4 +55,4 @@ signs:
       - "--output-signature=${signature}"
       - "${artifact}"
       - "--yes"
-    artifacts: all
+    artifacts: checksum

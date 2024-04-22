@@ -158,21 +158,6 @@ jobs:
           curl --request DELETE \
             --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$amd64zip \
             --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
-          assets=$(echo $assets | jq '.[]')
-
-          for asset in ${assets[@]}
-          do
-            asset_name=$(echo $asset | jq '.name')
-
-            if [[ $asset_name == *.sig ]]
-            then
-              asset_id=$(echo $asset | jq '.id')
-
-              curl --request DELETE \
-                --url https://api.github.com/repos/kaytu-io/pennywise/releases/assets/$asset_id \
-                --header 'authorization: Bearer ${{ secrets.GH_TOKEN }}'
-            fi
-          done
       - name: Upload Release Asset 386
         id: upload-release-asset-386
         uses: actions/upload-release-asset@v1
