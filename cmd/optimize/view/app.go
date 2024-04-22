@@ -569,7 +569,7 @@ func (m *App) getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, ins
 			HashedInstanceId:  hash.HashString(*instance.InstanceId),
 			State:             instance.State.Name,
 			InstanceType:      instance.InstanceType,
-			Platform:          instance.Platform,
+			Platform:          string(instance.Platform),
 			ThreadsPerCore:    *instance.CpuOptions.ThreadsPerCore,
 			CoreCount:         *instance.CpuOptions.CoreCount,
 			EbsOptimized:      *instance.EbsOptimized,
