@@ -30,6 +30,8 @@ type PreferencesConfiguration struct {
 	focused    int
 	valueFocus int
 	err        error
+	height     int
+	help       HelpView
 
 	pref  []preferences2.PreferenceItem
 	close func([]preferences2.PreferenceItem)
@@ -53,9 +55,9 @@ func NewPreferencesConfiguration(preferences []preferences2.PreferenceItem, clos
 			if pref.Value != nil {
 				in.SetValue(*pref.Value)
 			}
-		}
-		if pref.IsNumber {
-			in.Validate = numberValidator
+			if pref.IsNumber {
+				in.Validate = numberValidator
+			}
 		}
 		inputs = append(inputs, in)
 	}
@@ -63,6 +65,17 @@ func NewPreferencesConfiguration(preferences []preferences2.PreferenceItem, clos
 		inputs: inputs,
 		pref:   preferences,
 		close:  close,
+		help: HelpView{
+			lines: []string{
+				"↑/↓: move",
+				"enter: next field",
+				"←/→: prev/next value (for fields with specific values)",
+				"esc: apply and exit",
+				"tab: pin/unpin value to current ec2 instance",
+				"ctrl+c: exit",
+			},
+			height: 0,
+		},
 	}
 }
 
@@ -80,6 +93,9 @@ func (m *PreferencesConfiguration) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyTab:
 			pref := m.pref[m.focused]
 			in := m.inputs[m.focused]
+			if !pref.CanBePinned {
+				break
+			}
 			pref.Pinned = !pref.Pinned
 			if pref.Pinned {
 				in.Placeholder = "Pinned to current EC2 Instance"
@@ -92,6 +108,9 @@ func (m *PreferencesConfiguration) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(pref.PossibleValues) > 0 {
 					in.SetValue(pref.PossibleValues[0])
 					in.CursorStart()
+				}
+				if pref.IsNumber {
+					in.Validate = numberValidator
 				}
 			}
 			m.pref[m.focused] = pref
@@ -114,6 +133,9 @@ func (m *PreferencesConfiguration) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			l := len(m.pref[m.focused].PossibleValues)
 			if l > 0 {
 				m.valueFocus = (m.valueFocus - 1) % l
+				if m.valueFocus < 0 {
+					m.valueFocus = l - 1
+				}
 				m.inputs[m.focused].SetValue(m.pref[m.focused].PossibleValues[m.valueFocus])
 				m.inputs[m.focused].CursorStart()
 			}
@@ -164,19 +186,17 @@ func (m *PreferencesConfiguration) View() string {
 
 	builder.WriteString("Configure your preferences:\n")
 	for idx, pref := range m.pref {
+		key := pref.Key
+		if len(pref.Unit) > 0 {
+			key = fmt.Sprintf("%s (%s)", key, pref.Unit)
+		}
 		builder.WriteString("  ")
-		builder.WriteString(inputStyle.Width(30).Render(pref.Key))
+		builder.WriteString(inputStyle.Width(30).Render(key))
 		builder.WriteString("    ")
 		builder.WriteString(m.inputs[idx].View())
 		builder.WriteString("\n")
 	}
-	builder.WriteString("\n\n  ↑/↓: move\n" +
-		"  enter: next field\n" +
-		"  ←/→: prev/next value (for fields with specific values)\n" +
-		"  esc: apply and exit\n" +
-		"  tab: pin/unpin value to current ec2 instance \n" +
-		"  ctrl+c: exit\n",
-	)
+	builder.WriteString(m.help.String())
 	return builder.String()
 }
 
@@ -188,8 +208,14 @@ func pinnedValidator(s string) error {
 }
 
 func numberValidator(s string) error {
-	_, err := strconv.ParseInt(s, 10, 64)
-	return err
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	if n < 0 {
+		return errors.New("invalid number")
+	}
+	return nil
 }
 
 func (m *PreferencesConfiguration) nextInput() {
@@ -202,4 +228,17 @@ func (m *PreferencesConfiguration) prevInput() {
 	if m.focused < 0 {
 		m.focused = len(m.inputs) - 1
 	}
+}
+
+func (m *PreferencesConfiguration) IsResponsive() bool {
+	return m.height >= m.MinHeight()
+}
+
+func (m *PreferencesConfiguration) SetHeight(height int) {
+	m.height = height
+	m.help.SetHeight(m.height - (len(m.pref) + 2))
+}
+
+func (m *PreferencesConfiguration) MinHeight() int {
+	return len(m.pref) + 2 + m.help.MinHeight()
 }

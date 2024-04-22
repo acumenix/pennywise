@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-func Ec2InstanceWastageRequest(reqBody EC2InstanceWastageRequest, accessToken string) (*EC2InstanceWastageResponse, error) {
+func Ec2InstanceWastageRequest(reqBody EC2InstanceWastageRequest) (*EC2InstanceWastageResponse, error) {
 	payloadEncoded, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, err
@@ -18,7 +18,6 @@ func Ec2InstanceWastageRequest(reqBody EC2InstanceWastageRequest, accessToken st
 		return nil, fmt.Errorf("[requestAbout] : %v", err)
 	}
 	req.Header.Add("content-type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+accessToken)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("[requestAbout] : %v", err)
