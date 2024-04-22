@@ -48,7 +48,11 @@ func (m *PreferenceItem) ReconfigureInput() {
 		if len(m.pref.PossibleValues) > 0 {
 			m.input.Placeholder = "Any"
 			m.input.SetValue(m.pref.PossibleValues[m.valueIdx])
-			m.pref.Value = aws.String(m.pref.PossibleValues[m.valueIdx])
+			if m.pref.PossibleValues[m.valueIdx] == "" {
+				m.pref.Value = nil
+			} else {
+				m.pref.Value = aws.String(m.pref.PossibleValues[m.valueIdx])
+			}
 			m.input.Validate = pinnedValidator
 		}
 		if m.pref.IsNumber {
@@ -110,6 +114,11 @@ func (m *PreferenceItem) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
+	if val := m.input.Value(); len(val) > 0 {
+		m.pref.Value = aws.String(m.input.Value())
+	} else {
+		m.pref.Value = nil
+	}
 	return m, cmd
 }
 
@@ -120,6 +129,9 @@ func (m *PreferenceItem) View() string {
 	builder := strings.Builder{}
 
 	key := m.pref.Key
+	if len(m.pref.Alias) > 0 {
+		key = m.pref.Alias
+	}
 	if !m.hideService {
 		key = fmt.Sprintf("%s: %s", m.pref.Service, key)
 	}

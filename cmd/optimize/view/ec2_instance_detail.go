@@ -85,10 +85,10 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 			volumeSize = fmt.Sprintf("%d GB", *v.Size)
 		}
 		if v.Throughput != nil {
-			volumeThroughput = fmt.Sprintf("%d Mbps", *v.Throughput)
+			volumeThroughput = fmt.Sprintf("%d MB/s", *v.Throughput/8.0)
 		}
 		if vt := item.RightSizingRecommendation.VolumesTargetTypes[vid]; vt == "gp3" {
-			targetThroughput = fmt.Sprintf("%.2f Mbps", item.RightSizingRecommendation.VolumesTargetThroughput[vid])
+			targetThroughput = fmt.Sprintf("%.2f MB/s", item.RightSizingRecommendation.VolumesTargetThroughput[vid]/8.0)
 		}
 
 		if v.Iops != nil {
@@ -119,7 +119,7 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 			{
 				"Throughput",
 				volumeThroughput,
-				fmt.Sprintf("Avg: %.2f Mbps", item.RightSizingRecommendation.VolumesThroughputUtilization[vid]),
+				fmt.Sprintf("Avg: %.2f MB/s", item.RightSizingRecommendation.VolumesThroughputUtilization[vid]/8.0),
 				targetThroughput,
 			},
 			{

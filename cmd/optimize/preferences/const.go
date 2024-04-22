@@ -5,6 +5,7 @@ import "github.com/aws/aws-sdk-go-v2/aws"
 type PreferenceItem struct {
 	Service        string
 	Key            string
+	Alias          string
 	IsNumber       bool
 	Value          *string
 	PossibleValues []string
@@ -26,7 +27,7 @@ func DefaultPreferences() []PreferenceItem {
 		{Service: "EC2Instance", Key: "ENASupported"},
 		{Service: "EC2Instance", Key: "SupportedRootDeviceTypes", Value: aws.String("EBSOnly"), PreventPinning: true, PossibleValues: []string{"EBSOnly"}},
 		{Service: "EC2Instance", Key: "vCPU", IsNumber: true},
-		{Service: "EC2Instance", Key: "MemoryGB", IsNumber: true, Pinned: true},
+		{Service: "EC2Instance", Key: "MemoryGB", Alias: "Memory", IsNumber: true, Pinned: true, Unit: "GiB"},
 		{Service: "EC2Instance", Key: "CPUBreathingRoom", IsNumber: true, Value: aws.String("10"), PreventPinning: true, Unit: "%"},
 		{Service: "EC2Instance", Key: "MemoryBreathingRoom", IsNumber: true, Value: aws.String("10"), PreventPinning: true, Unit: "%"},
 		{Service: "EC2Instance", Key: "NetworkBreathingRoom", IsNumber: true, Value: aws.String("10"), PreventPinning: true, Unit: "%"},
