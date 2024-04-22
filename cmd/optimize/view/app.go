@@ -561,6 +561,11 @@ func (m *App) getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, ins
 
 		m.jobChan <- job
 	}
+	platform := ""
+	if instance.PlatformDetails != nil {
+		platform = *instance.PlatformDetails
+	}
+
 	return &wastage.EC2InstanceWastageRequest{
 		HashedAccountID: accountHash,
 		HashedUserID:    idHash,
@@ -569,7 +574,7 @@ func (m *App) getEc2InstanceRequestData(ctx context.Context, cfg aws.Config, ins
 			HashedInstanceId:  hash.HashString(*instance.InstanceId),
 			State:             instance.State.Name,
 			InstanceType:      instance.InstanceType,
-			Platform:          string(instance.Platform),
+			Platform:          platform,
 			ThreadsPerCore:    *instance.CpuOptions.ThreadsPerCore,
 			CoreCount:         *instance.CpuOptions.CoreCount,
 			EbsOptimized:      *instance.EbsOptimized,
