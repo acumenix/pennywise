@@ -171,7 +171,7 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		{Title: "Properties", Width: 30},
 		{Title: "Current", Width: 20},
 		{Title: "Utilization", Width: 20},
-		{Title: "Suggested", Width: 20},
+		{Title: "Suggested", Width: 30},
 	}
 
 	model := Ec2InstanceDetail{
