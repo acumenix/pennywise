@@ -81,6 +81,8 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 		targetThroughput := "Not applicable"
 		volumeIops := ""
 		targetIops := "Not applicable"
+		targetBaselineIops := fmt.Sprintf("%d", item.RightSizingRecommendation.VolumesTargetBaselineIOPS[vid])
+		targetBaselineThroughput := fmt.Sprintf("%.2f MB/s", item.RightSizingRecommendation.VolumesTargetBaselineThroughput[vid]/8.0)
 		if v.Size != nil {
 			volumeSize = fmt.Sprintf("%d GB", *v.Size)
 		}
@@ -111,16 +113,16 @@ func ExtractProperties(item OptimizationItem) map[string][]table.Row {
 				fmt.Sprintf("%d GB", item.RightSizingRecommendation.VolumesTargetSizes[vid]),
 			},
 			{
-				"IOPS",
+				"IOPS (Baseline / Provisioned)",
 				volumeIops,
 				fmt.Sprintf("Avg: %.2f", item.RightSizingRecommendation.VolumesIOPSUtilization[vid]),
-				targetIops,
+				fmt.Sprintf("%s / %s", targetBaselineIops, targetIops),
 			},
 			{
-				"Throughput",
+				"Throughput (Baseline / Provisioned)",
 				volumeThroughput,
 				fmt.Sprintf("Avg: %.2f MB/s", item.RightSizingRecommendation.VolumesThroughputUtilization[vid]/8.0),
-				targetThroughput,
+				fmt.Sprintf("%s / %s", targetBaselineThroughput, targetThroughput),
 			},
 			{
 				"Total Cost (Monthly)",
@@ -169,7 +171,7 @@ func NewEc2InstanceDetail(item OptimizationItem, close func()) *Ec2InstanceDetai
 		{Title: "Properties", Width: 30},
 		{Title: "Current", Width: 20},
 		{Title: "Utilization", Width: 20},
-		{Title: "Suggested", Width: 20},
+		{Title: "Suggested", Width: 30},
 	}
 
 	model := Ec2InstanceDetail{
