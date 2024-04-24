@@ -106,8 +106,8 @@ jobs:
           sudo apt-get -y install osslsigncode
           echo "${{ secrets.SELFSIGNED_KEY }}" | base64 --decode > cert.key
           echo "${{ secrets.SELFSIGNED_CRT }}" | base64 --decode > cert.crt          
-          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe -out pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
-          zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.exe
+          osslsigncode sign -certs cert.crt -key cert.key -n "Pennywise" -i https://kaytu.io/ -in pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64.exe -out pennywise.exe
+          zip pennywise_${{ steps.set_new_tag.outputs.new_tag }}_windows_amd64_signed.zip pennywise.exe
           export UPLOAD_URL=$(curl --silent "https://api.github.com/repos/kaytu-io/pennywise/releases/latest" | jq -r .upload_url)
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
           release_id=$(curl --request GET \
