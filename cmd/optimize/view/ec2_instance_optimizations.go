@@ -54,8 +54,8 @@ func NewEC2InstanceOptimizations(instanceChan chan OptimizationItem) *Ec2Instanc
 		{Title: "Region", Width: 15},
 		{Title: "Platform", Width: 15},
 		{Title: "Total Saving (Monthly)", Width: 25},
+		{Title: "", Width: 1},
 	}
-
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(nil),
@@ -161,6 +161,7 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if i.OptimizationLoading {
 						row[4] = "loading"
 					}
+					row = append(row, "→")
 					rows = append(rows, row)
 				}
 				m.table.SetRows(rows)

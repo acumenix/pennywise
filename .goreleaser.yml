@@ -35,8 +35,6 @@ builds:
       - -s -w -X github.com/kaytu-io/pennywise/cmd/predef.VERSION={{ .Version }}
     goos:
       - windows
-    goarch:
-      - amd64
     main: ./main.go
 archives:
   - id: binary
@@ -44,6 +42,9 @@ archives:
   - id: default
     format: tar.gz
     builds: [linux, darwin]
+  - id: windows
+    format: zip
+    builds: [ windows ]
 
 signs:
   - cmd: cosign
