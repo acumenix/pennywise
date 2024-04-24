@@ -230,6 +230,7 @@ func (m *Ec2InstanceOptimizations) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.UpdateResponsive()
 					})
 					initCmd = m.detailsPage.Init()
+					m.detailsPage.width = m.Width
 					break
 				}
 			}
