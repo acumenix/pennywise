@@ -175,6 +175,46 @@ func (m *App) ProcessInstances(awsCfg aws.Config, accountHash, idHash, arnHash s
 	}
 }
 
+func minOfDatapoints(datapoints []types2.Datapoint) float64 {
+	if len(datapoints) == 0 {
+		return 0.0
+	}
+
+	avg := float64(0)
+	for _, dp := range datapoints {
+		if dp.Minimum == nil {
+			if dp.Average == nil {
+				continue
+			}
+			avg += *dp.Average
+			continue
+		}
+		avg += *dp.Minimum
+	}
+	avg = avg / float64(len(datapoints))
+	return avg
+}
+
+func maxOfDatapoints(datapoints []types2.Datapoint) float64 {
+	if len(datapoints) == 0 {
+		return 0.0
+	}
+
+	avg := float64(0)
+	for _, dp := range datapoints {
+		if dp.Maximum == nil {
+			if dp.Average == nil {
+				continue
+			}
+			avg += *dp.Average
+			continue
+		}
+		avg += *dp.Maximum
+	}
+	avg = avg / float64(len(datapoints))
+	return avg
+}
+
 func averageOfDatapoints(datapoints []types2.Datapoint) float64 {
 	if len(datapoints) == 0 {
 		return 0.0
@@ -245,16 +285,32 @@ func (m *App) ProcessInstance(awsConf aws.Config, item OptimizationItem, account
 		return
 	}
 
-	res.RightSizing.VolumesThroughputUtilization = map[string]float64{}
-	res.RightSizing.VolumesIOPSUtilization = map[string]float64{}
+	res.RightSizing.AvgVolumesThroughputUtilization = map[string]float64{}
+	res.RightSizing.MinVolumesThroughputUtilization = map[string]float64{}
+	res.RightSizing.MaxVolumesThroughputUtilization = map[string]float64{}
+	res.RightSizing.AvgVolumesIOPSUtilization = map[string]float64{}
+	res.RightSizing.MinVolumesIOPSUtilization = map[string]float64{}
+	res.RightSizing.MaxVolumesIOPSUtilization = map[string]float64{}
 	for volumeID, v := range req.VolumeMetrics {
 		readBytesAvg := averageOfDatapoints(v["VolumeReadBytes"])
 		writeBytesAvg := averageOfDatapoints(v["VolumeWriteBytes"])
-		res.RightSizing.VolumesThroughputUtilization[volumeID] = (readBytesAvg + writeBytesAvg) / 1000000.0
+		res.RightSizing.AvgVolumesThroughputUtilization[volumeID] = (readBytesAvg + writeBytesAvg) / 1000000.0
+		readBytesMin := minOfDatapoints(v["VolumeReadBytes"])
+		writeBytesMin := minOfDatapoints(v["VolumeWriteBytes"])
+		res.RightSizing.MinVolumesThroughputUtilization[volumeID] = (readBytesMin + writeBytesMin) / 1000000.0
+		readBytesMax := maxOfDatapoints(v["VolumeReadBytes"])
+		writeBytesMax := maxOfDatapoints(v["VolumeWriteBytes"])
+		res.RightSizing.MaxVolumesThroughputUtilization[volumeID] = (readBytesMax + writeBytesMax) / 1000000.0
 
 		readOpsAvg := averageOfDatapoints(v["VolumeReadOps"])
 		writeOpsAvg := averageOfDatapoints(v["VolumeWriteOps"])
-		res.RightSizing.VolumesIOPSUtilization[volumeID] = readOpsAvg + writeOpsAvg
+		res.RightSizing.AvgVolumesIOPSUtilization[volumeID] = readOpsAvg + writeOpsAvg
+		readOpsMin := minOfDatapoints(v["VolumeReadOps"])
+		writeOpsMin := minOfDatapoints(v["VolumeWriteOps"])
+		res.RightSizing.MinVolumesIOPSUtilization[volumeID] = readOpsMin + writeOpsMin
+		readOpsMax := maxOfDatapoints(v["VolumeReadOps"])
+		writeOpsMax := maxOfDatapoints(v["VolumeWriteOps"])
+		res.RightSizing.MaxVolumesIOPSUtilization[volumeID] = readOpsMax + writeOpsMax
 	}
 
 	m.optimizationsTable.SendItem(OptimizationItem{
