@@ -6,6 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kaytu-io/pennywise/pkg/hash"
+	"github.com/muesli/reflow/wordwrap"
+	"strings"
 )
 
 type Ec2InstanceDetail struct {
@@ -237,6 +239,7 @@ func (m *Ec2InstanceDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Ec2InstanceDetail) View() string {
 	return baseStyle.Render(m.deviceTable.View()) + "\n" +
+		wordwrap.String(m.item.RightSizingRecommendation.Description, m.width) + "\n" +
 		baseStyle.Render(m.detailTable.View()) + "\n" +
 		m.help.String()
 }
@@ -246,10 +249,12 @@ func (m *Ec2InstanceDetail) IsResponsive() bool {
 }
 
 func (m *Ec2InstanceDetail) SetHeight(height int) {
+	l := strings.Count(wordwrap.String(m.item.RightSizingRecommendation.Description, m.width), "\n")
 	m.height = height
-	m.help.SetHeight(m.height - (len(m.detailTable.Rows()) + 4 + len(m.deviceTable.Rows()) + 4))
+	m.help.SetHeight(m.height - (len(m.detailTable.Rows()) + 4 + len(m.deviceTable.Rows()) + 4 + l))
 }
 
 func (m *Ec2InstanceDetail) MinHeight() int {
-	return len(m.detailTable.Rows()) + 4 + len(m.deviceTable.Rows()) + 4 + m.help.MinHeight()
+	l := strings.Count(wordwrap.String(m.item.RightSizingRecommendation.Description, m.width), "\n")
+	return len(m.detailTable.Rows()) + 4 + len(m.deviceTable.Rows()) + 4 + m.help.MinHeight() + l
 }
